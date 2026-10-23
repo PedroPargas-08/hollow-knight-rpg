@@ -1,0 +1,27 @@
+{
+  "name": "valdrim-rpg",
+  "version": "0.1.0-fase1",
+  "private": true,
+  "description": "Valdrim — plataforma web (nome provisório) para administrar e jogar campanhas de RPG de mesa. Fase 1: interface e navegação demonstrativas.",
+  "type": "module",
+  "scripts": {
+    "dev": "node build.mjs --serve",
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test tests/unit/*.test.ts",
+    "test:e2e": "node tests/e2e/run.cjs",
+    "test": "npm run test:unit && npm run build && npm run test:e2e"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.27.0",
+    "playwright": "^1.56.0",
+    "tsx": "^4.0.0",
+    "typescript": "^6.0.0"
+  }
+}
