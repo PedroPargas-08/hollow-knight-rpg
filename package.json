@@ -2,7 +2,7 @@
   "name": "valdrim-rpg",
   "version": "0.2.0-fase2",
   "private": true,
-  "description": "Valdrim — plataforma web (nome provisório) para campanhas de RPG de mesa. Fase 2: autenticação, banco de dados e RLS (Supabase).",
+  "description": "Valdrim — plataforma web para campanhas de RPG de mesa. Fase 2: autenticação, banco de dados e RLS (Supabase).",
   "type": "module",
   "scripts": {
     "dev": "node build.mjs --serve",
@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test tests/unit/*.test.ts",
     "test:e2e": "node -e \"process.env.FAKE_SUPABASE='1'; import('./build.mjs')\" && node tests/e2e/run.cjs",
-    "test": "npm run test:unit && npm run test:e2e",
-    "build:test": "FAKE_SUPABASE=1 node build.mjs"
+    "test": "npm run typecheck && npm run test:unit && npm run test:e2e",
+    "build:test": "node -e \"process.env.FAKE_SUPABASE='1'; import('./build.mjs')\""
   },
   "dependencies": {
     "react": "^19.2.0",
