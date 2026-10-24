@@ -3,12 +3,10 @@ export type Errors<K extends string> = Partial<Record<K, string>>;
 
 export const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
 
-export function validateLogin(v: { identifier: string; password: string }): Errors<'identifier' | 'password'> {
-  const e: Errors<'identifier' | 'password'> = {};
-  const id = v.identifier.trim();
-  if (!id) e.identifier = 'Informe seu e-mail ou identificador de acesso.';
-  else if (id.includes('@') ? !isEmail(id) : !/^[\w.-]{3,}$/.test(id))
-    e.identifier = id.includes('@') ? 'Esse e-mail parece incompleto. Exemplo: nome@dominio.com' : 'O identificador precisa ter ao menos 3 caracteres, sem espaços.';
+export function validateLogin(v: { email: string; password: string }): Errors<'email' | 'password'> {
+  const e: Errors<'email' | 'password'> = {};
+  if (!v.email.trim()) e.email = 'Informe seu e-mail.';
+  else if (!isEmail(v.email)) e.email = 'Esse e-mail parece incompleto. Exemplo: nome@dominio.com';
   if (!v.password) e.password = 'Informe sua senha.';
   return e;
 }
@@ -37,6 +35,15 @@ export function validateRegister(v: RegisterValues): Errors<keyof RegisterValues
   if (!v.confirm) e.confirm = 'Repita a senha para confirmar.';
   else if (v.confirm !== v.password) e.confirm = 'As senhas não são iguais.';
   if (!v.terms) e.terms = 'É preciso aceitar os termos provisórios para continuar.';
+  return e;
+}
+
+export function validateNewPassword(v: { password: string; confirm: string }): Errors<'password' | 'confirm'> {
+  const e: Errors<'password' | 'confirm'> = {};
+  if (v.password.length < 8) e.password = 'A senha precisa ter ao menos 8 caracteres.';
+  else if (!/[A-Za-z]/.test(v.password) || !/\d/.test(v.password)) e.password = 'Misture letras e números.';
+  if (!v.confirm) e.confirm = 'Repita a senha para confirmar.';
+  else if (v.confirm !== v.password) e.confirm = 'As senhas não são iguais.';
   return e;
 }
 

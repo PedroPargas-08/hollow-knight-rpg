@@ -1,14 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, navigate, useRoute } from '../app/router';
-import { useDemo } from '../app/demo';
+import { useAuth } from '../app/auth';
 import { masterNav, playerNav, type NavGroup, type NavItem } from '../app/nav';
 import { isActiveTo } from '../lib/router';
-import { APP_NAME, DEMO_NOTE, notifications } from '../data/demo';
+import { APP_NAME } from '../data/brand';
 import { Icon } from './Icon';
 import { Backdrop, MaskGlyph } from './domain';
-import { Button, LinkButton, Seg } from './ui';
-import { Modal } from './overlay';
-import type { Role } from '../types';
+import { Button, LinkButton } from './ui';
+import { useToast } from './overlay';
+import { friendlyError } from '../lib/sheet';
 
 const focusMain = () => document.getElementById('main')?.focus();
 const SkipLink = () => <button className="skip" onClick={focusMain}>Pular para o conteúdo</button>;
@@ -82,14 +82,13 @@ function NavEntry({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   );
 }
 
-const ROLE_LABEL: Record<Exclude<Role, 'visitante'>, string> = { jogador: 'Mesa do jogador', mestre: 'Mesa do mestre' };
-
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, empty, setEmpty } = useDemo();
+  const { profile, signOut } = useAuth();
+  const toast = useToast();
   const { path } = useRoute();
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 1100);
   const [open, setOpen] = useState(false);
-  const [bell, setBell] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   useEffect(() => setOpen(false), [path]);
   useEffect(() => {
     if (!open) return;
@@ -98,12 +97,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('keydown', h);
   }, [open]);
 
+  const role = profile?.role ?? 'jogador';
   const groups: NavGroup[] = role === 'mestre' ? masterNav : playerNav;
-  const r = role === 'visitante' ? 'jogador' : role;
-  const switchTo = (next: 'jogador' | 'mestre') => { setRole(next); navigate(next === 'mestre' ? '/mestre' : '/jogador'); };
+  const leave = async () => {
+    setLeaving(true);
+    try { await signOut(); navigate('/'); } catch (e) { toast(friendlyError(e), 'bad'); setLeaving(false); }
+  };
 
   return (
-    <div className="shell" data-role={r} data-collapsed={collapsed}>
+    <div className="shell" data-role={role} data-collapsed={collapsed}>
       <SkipLink />
       <aside className="sidebar" data-open={open} aria-label="Navegação principal">
         <div className="sb-brand"><Brand /></div>
@@ -115,38 +117,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ))}
         </nav>
-        <div className="sb-foot small muted">{DEMO_NOTE}. Nada é salvo nesta fase.</div>
+        <div className="sb-foot small muted">Conectado como <strong>{profile?.display_name}</strong>.</div>
       </aside>
       {open && <div className="scrim" onClick={() => setOpen(false)} aria-hidden="true" />}
 
       <div className="shell-main">
-        <div className="demobar" role="region" aria-label="Controles da demonstração">
-          <strong>Modo demonstração</strong>
-          <span>Ver como:</span>
-          <Seg<'jogador' | 'mestre'> label="Perfil de demonstração" value={r} onChange={switchTo} items={[{ id: 'jogador', label: 'Jogador' }, { id: 'mestre', label: 'Mestre' }]} />
-          <label className="check" style={{ minHeight: 32, padding: 0 }}>
-            <input type="checkbox" checked={empty} onChange={(e) => setEmpty(e.target.checked)} /> <span>Simular dados vazios</span>
-          </label>
-        </div>
         <header className="topbar">
           <Button variant="ghost" className="btn-icon menu-btn" onClick={() => setOpen(true)} aria-label="Abrir menu" aria-expanded={open}><Icon name="menu" /></Button>
           <Button variant="ghost" className="btn-icon collapse-btn" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} aria-pressed={collapsed}><Icon name="menu" /></Button>
-          <span className="where">{ROLE_LABEL[r]}</span>
+          <span className="where">{role === 'mestre' ? 'Mesa do mestre' : 'Mesa do jogador'}</span>
           <span style={{ marginLeft: 'auto' }} className="row">
-            <Button variant="ghost" className="btn-icon" onClick={() => setBell(true)} aria-label={`Notificações (${notifications.length} de demonstração)`}><Icon name="bell" /></Button>
-            <LinkButton to="/perfil" variant="ghost" className="btn-icon" ><Icon name="user" label="Perfil e configurações" /></LinkButton>
+            <LinkButton to="/perfil" variant="ghost" className="btn-icon"><Icon name="user" label="Perfil e configurações" /></LinkButton>
+            <Button variant="ghost" size="sm" icon="logout" loading={leaving} onClick={leave}>Sair</Button>
           </span>
         </header>
         <main id="main" tabIndex={-1} className="content">{children}</main>
-        <footer className="footnote">{APP_NAME} · Fase 1 — interface demonstrativa. Esconder botões não é segurança: as permissões reais serão aplicadas no servidor e no banco de dados.</footer>
+        <footer className="footnote">{APP_NAME} · Fase 2 — contas e dados reais. As permissões são aplicadas pelo banco (RLS), não pela interface.</footer>
       </div>
-
-      {bell && (
-        <Modal title="Notificações" onClose={() => setBell(false)} actions={<Button onClick={() => setBell(false)}>Fechar</Button>}>
-          <p className="hint">Exemplos fictícios — nenhuma notificação real existe nesta fase.</p>
-          <ul className="list">{notifications.map((n) => <li className="list-row" key={n.id}><div className="grow"><strong>{n.text}</strong><span className="muted small">{n.when}</span></div></li>)}</ul>
-        </Modal>
-      )}
     </div>
   );
 }

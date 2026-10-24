@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isActiveTo, matchRoute, parseHash } from '../../src/lib/router.ts';
-import { isEmail, passwordStrength, validateLogin, validateRecovery, validateRegister } from '../../src/lib/validation.ts';
+import { isEmail, passwordStrength, validateLogin, validateNewPassword, validateRecovery, validateRegister } from '../../src/lib/validation.ts';
 import { searchArticles } from '../../src/lib/search.ts';
 import { articles, categories } from '../../src/data/rules.ts';
 
@@ -22,11 +22,17 @@ test('isActiveTo considera a aba', () => {
   assert.equal(isActiveTo('/jogador/ficha?aba=atributos', '/jogador/ficha', q), false);
   assert.equal(isActiveTo('/jogador/ficha?aba=identidade', '/jogador/ficha', new URLSearchParams(), 'identidade'), true);
 });
-test('validação de login', () => {
-  assert.ok(validateLogin({ identifier: '', password: '' }).identifier);
-  assert.ok(validateLogin({ identifier: 'abc@', password: 'x' }).identifier);
-  assert.deepEqual(validateLogin({ identifier: 'nome@dominio.com', password: 'x' }), {});
-  assert.deepEqual(validateLogin({ identifier: 'viajante_01', password: 'x' }), {});
+test('validação de login (por e-mail)', () => {
+  assert.ok(validateLogin({ email: '', password: '' }).email);
+  assert.ok(validateLogin({ email: 'abc@', password: 'x' }).email);
+  assert.ok(validateLogin({ email: 'nome@dominio.com', password: '' }).password);
+  assert.deepEqual(validateLogin({ email: 'nome@dominio.com', password: 'x' }), {});
+});
+test('validação de nova senha', () => {
+  assert.ok(validateNewPassword({ password: 'curta1', confirm: 'curta1' }).password);
+  assert.ok(validateNewPassword({ password: 'somenteletras', confirm: 'somenteletras' }).password);
+  assert.ok(validateNewPassword({ password: 'Senha1234', confirm: 'outra1234' }).confirm);
+  assert.deepEqual(validateNewPassword({ password: 'Senha1234', confirm: 'Senha1234' }), {});
 });
 test('validação de cadastro: senhas, termos e nenhum campo de papel', () => {
   const ok = { displayName: 'Ilvane', email: 'a@b.co', password: 'senha1234', confirm: 'senha1234', terms: true };

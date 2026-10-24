@@ -1,6 +1,3 @@
-import { Fragment } from 'react';
-import type { Region } from '../data/demo';
-
 /** Máscara original (não é a de nenhum jogo): ovalada, olhos em fenda e coroa recortada. */
 export function MaskGlyph({ className }: { className?: string }) {
   return (
@@ -26,28 +23,6 @@ export function Backdrop({ ruins = true }: { ruins?: boolean }) {
           <rect x="0" y="206" width="1200" height="14" fill="#0b0f1d" opacity=".9" />
         </svg>
       )}
-    </div>
-  );
-}
-
-/** Mapa estilizado de regiões. Regiões secretas só aparecem quando showSecret=true (visão do mestre). */
-export function RegionMap({ regions, showSecret }: { regions: Region[]; showSecret: boolean }) {
-  const vis = regions.filter((r) => r.revealed || showSecret);
-  const byId = new Map(vis.map((r) => [r.id, r]));
-  const lines: [Region, Region][] = [];
-  vis.forEach((a) => a.links.forEach((l) => { const b = byId.get(l); if (b && a.id < b.id) lines.push([a, b]); }));
-  return (
-    <div className="map">
-      <svg viewBox="0 0 100 80" role="img" aria-label={`Mapa estilizado com ${vis.length} região(ões) visíveis`}>
-        {lines.map(([a, b]) => <line key={a.id + b.id} x1={a.x} y1={a.y * 0.8} x2={b.x} y2={b.y * 0.8} className={a.revealed && b.revealed ? 'ln' : 'ln ln-secret'} />)}
-        {vis.map((r) => (
-          <Fragment key={r.id}>
-            <circle cx={r.x} cy={r.y * 0.8} r={r.revealed ? 3 : 2.6} className={r.revealed ? 'node' : 'node node-secret'} />
-            {!r.revealed && <text x={r.x} y={r.y * 0.8 + 1} className="q" textAnchor="middle">?</text>}
-            <text x={r.x} y={r.y * 0.8 + 7} textAnchor="middle" className="lbl">{r.name}</text>
-          </Fragment>
-        ))}
-      </svg>
     </div>
   );
 }

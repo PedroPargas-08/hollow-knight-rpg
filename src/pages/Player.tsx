@@ -1,170 +1,188 @@
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, navigate, useRoute } from '../app/router';
-import { useDemo } from '../app/demo';
+import { useAuth } from '../app/auth';
 import { SHEET_TABS, type SheetTab } from '../app/nav';
-import { Alert, Badge, Button, DemoBadge, EmptyState, LinkButton, Meter, PageHead, Panel, Seg, TabPanel, Tabs } from '../components/ui';
-import { CampaignArt, MaskGlyph, RegionMap } from '../components/domain';
+import { Alert, Badge, Button, EmptyState, Field, LinkButton, Meter, PageHead, Panel, TabPanel, Tabs } from '../components/ui';
+import { MaskGlyph } from '../components/domain';
 import { Icon } from '../components/Icon';
-import { usePlanned, useToast } from '../components/overlay';
-import { campaigns, character as ch, demoUsers, nextObjectives, notifications, quests, regions, rollHistory } from '../data/demo';
+import { Modal, useToast } from '../components/overlay';
+import { createCharacter, getCharacter, listCampaigns, listCharacters, STATUS_LABEL, updateCharacter, type Campaign, type Character } from '../lib/api';
+import { ATTRIBUTES, clampInt, defaultSheet, friendlyError, type Sheet } from '../lib/sheet';
+import { useAsync } from '../lib/useAsync';
 
-function Crest({ compact }: { compact?: boolean }) {
+const Loading = ({ what }: { what: string }) => <EmptyState icon="hourglass" title={`Carregando ${what}…`}><span className="spinner" role="status" aria-label="Carregando" /></EmptyState>;
+
+function NewCharacter({ campaigns, onClose }: { campaigns: Campaign[]; onClose: () => void }) {
+  const toast = useToast();
+  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? '');
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!campaignId) { setError('Escolha uma campanha.'); return; }
+    if (!name.trim() || name.trim().length > 80) { setError('Informe um nome de até 80 caracteres.'); return; }
+    setBusy(true); setError(undefined);
+    try { const c = await createCharacter({ campaign_id: campaignId, name, sheet: defaultSheet() }); toast('Personagem criado.', 'ok'); onClose(); navigate(`/jogador/ficha?id=${c.id}`); }
+    catch (x) { setError(friendlyError(x)); setBusy(false); }
+  };
   return (
-    <div className="crest">
-      <div className="portrait" aria-hidden="true"><MaskGlyph className="mask" /></div>
-      <div><div className="crest-name">{ch.name}</div><div className="muted small">{ch.stage} · {ch.campaign}</div>{!compact && <p className="dim small" style={{ margin: '.4rem 0 0' }}>{ch.concept}</p>}</div>
-    </div>
+    <Modal title="Novo personagem" onClose={onClose}>
+      <form className="stack" onSubmit={submit} noValidate>
+        <div className="field"><label htmlFor="nch-camp">Campanha</label>
+          <select id="nch-camp" className="input" value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>{campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <Field label="Nome do personagem" htmlFor="nch-name" error={error}><input id="nch-name" className="input" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <p className="hint" style={{ margin: 0 }}>Valores iniciais são provisórios; as regras de criação ainda não foram definidas.</p>
+        <div className="modal-actions"><Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button><Button type="submit" variant="primary" loading={busy}>Criar</Button></div>
+      </form>
+    </Modal>
   );
 }
 
+const CharCard = ({ c, campaign }: { c: Character; campaign?: Campaign }) => (
+  <article className="panel"><div className="crest"><div className="portrait" aria-hidden="true"><MaskGlyph className="mask" /></div>
+    <div className="grow"><div className="crest-name">{c.name}</div><div className="muted small">Estágio {c.stage} · {campaign?.name ?? 'Campanha'}</div></div></div>
+    <div className="grid cols-2" style={{ margin: '.8rem 0' }}><Meter label="PV" kind="pv" now={c.sheet.pv.now} max={c.sheet.pv.max} /><Meter label="ALMA" kind="alma" now={c.sheet.alma.now} max={c.sheet.alma.max} /></div>
+    <LinkButton to={`/jogador/ficha?id=${c.id}`} size="sm" variant="primary" icon="sheet">Abrir ficha</LinkButton></article>
+);
+
 /* ================= PAINEL DO JOGADOR ================= */
 export function PlayerDashboard() {
-  const { empty } = useDemo();
-  const toast = useToast();
-  const [done, setDone] = useState<Record<number, boolean>>({});
-  const [note, setNote] = useState('');
-  const camp = campaigns.find((c) => c.id === ch.campaignId)!;
-  const known = quests.filter((q) => q.visibility === 'jogadores');
-  const revealed = regions.filter((r) => r.revealed);
+  const { profile } = useAuth();
+  const camps = useAsync(listCampaigns, []);
+  const chars = useAsync(listCharacters, []);
+  const [creating, setCreating] = useState(false);
+  const campById = new Map((camps.data ?? []).map((c) => [c.id, c]));
+  const mine = (chars.data ?? []).filter((c) => c.owner_id === profile!.id);
 
   return (
     <>
-      <PageHead eyebrow="Painel do jogador" title={`Bem-vindo de volta, ${demoUsers.jogador.name}`} actions={<DemoBadge />}>
-        {empty ? 'Você ainda não participa de nenhuma campanha.' : <>Sua jornada em <strong>{camp.name}</strong> continua.</>}
-      </PageHead>
-
+      <PageHead eyebrow="Painel do jogador" title={`Bem-vindo de volta, ${profile!.display_name}`}>Aqui ficam suas campanhas e seus personagens — dados reais, visíveis só para você e para o mestre de cada campanha.</PageHead>
       <div className="dash">
         <div className="stack">
-          <Panel title="Campanha ativa" icon="flag" actions={!empty && <Badge tone="ok">{camp.state}</Badge>}>
-            {empty ? <EmptyState icon="flag" title="Nenhuma campanha ainda" action={<LinkButton to="/campanhas" variant="primary">Ver campanhas</LinkButton>}>Quando um mestre convidar você, a campanha aparecerá aqui.</EmptyState> : (
-              <div className="camp-mini"><div className="art"><CampaignArt art={camp.art} /></div>
-                <div><h3 style={{ marginBottom: '.2rem' }}>{camp.name}</h3><p className="muted small" style={{ margin: 0 }}>Mestre: {camp.master} · {camp.players.length} participantes</p>
-                  <p className="dim" style={{ margin: '.6rem 0 .3rem' }}><strong>Última sessão:</strong> {camp.lastSession}</p>
-                  <LinkButton to="/campanhas" size="sm">Minhas campanhas</LinkButton></div></div>)}
-          </Panel>
-
-          <Panel title="Personagem principal" icon="user">
-            {empty ? <EmptyState icon="user" title="Sem personagem">Você ainda não tem personagem. A criação de fichas chega em uma fase futura.</EmptyState> : (
-              <div className="stack">
-                <Crest />
-                <div className="grid cols-2"><Meter label="PV" kind="pv" now={ch.pv.now} max={ch.pv.max} /><Meter label="ALMA" kind="alma" now={ch.alma.now} max={ch.alma.max} /></div>
-                <div className="row">
-                  <LinkButton to="/jogador/ficha" variant="primary" icon="sheet" size="sm">Abrir ficha</LinkButton>
-                  <LinkButton to="/jogador/ficha?aba=habilidades" icon="spark" size="sm">Habilidades</LinkButton>
-                  <LinkButton to="/jogador/ficha?aba=equipamento" icon="sword" size="sm">Equipamento</LinkButton>
-                  <LinkButton to="/jogador/ficha?aba=equipamento" icon="pack" size="sm">Inventário</LinkButton>
-                </div>
-              </div>)}
-          </Panel>
-
-          <Panel title="Missões conhecidas" icon="flag">
-            {empty || !known.length ? <EmptyState icon="flag" title="Nenhuma missão conhecida">Missões reveladas pelo mestre aparecerão aqui.</EmptyState> : (
-              <ul className="list">{known.map((q) => (
-                <li key={q.id} className="list-row"><Icon name={q.status === 'Concluída' ? 'check' : 'flag'} /><div className="grow"><strong>{q.title}</strong><span className="dim small">{q.text}</span></div><Badge tone={q.status === 'Concluída' ? 'ok' : 'accent'}>{q.status}</Badge></li>))}</ul>)}
-          </Panel>
-
-          <Panel title="Mapas e regiões reveladas" icon="map" actions={<Badge>{empty ? 0 : revealed.length} reveladas</Badge>}>
-            {empty ? <EmptyState icon="map" title="Nenhuma região revelada">O mapa se completa conforme o mestre revela regiões.</EmptyState> : (<><RegionMap regions={regions} showSecret={false} />
-              <p className="hint">Regiões ainda não reveladas pelo mestre não aparecem aqui — nem mesmo o nome.</p></>)}
+          <Panel title="Meus personagens" icon="user" actions={<Button size="sm" icon="plus" disabled={!camps.data?.length} onClick={() => setCreating(true)}>Novo personagem</Button>}>
+            {chars.loading && !chars.data ? <Loading what="personagens" /> : chars.error ? <EmptyState icon="alert" title="Não foi possível carregar" action={<Button onClick={chars.reload}>Tentar de novo</Button>}>{chars.error}</EmptyState>
+              : !mine.length ? <EmptyState icon="user" title="Nenhum personagem ainda">{camps.data?.length ? 'Crie seu primeiro personagem em uma das suas campanhas.' : 'Entre em uma campanha com um convite para poder criar um personagem.'}</EmptyState>
+              : <div className="grid cols-2">{mine.map((c) => <CharCard key={c.id} c={c} campaign={campById.get(c.campaign_id)} />)}</div>}
           </Panel>
         </div>
-
         <div className="stack">
-          <Alert tone="info" icon="eye">Você vê apenas o que foi revelado a você. Informações privadas do mestre nunca aparecem neste painel.</Alert>
-          <Panel title="Próximos objetivos" icon="compass">
-            {empty ? <p className="muted">Sem objetivos por enquanto.</p> : (
-              <ul className="list">{nextObjectives.map((o, i) => <li key={o} className="list-row"><label className="check" style={{ minHeight: 'auto' }}><input type="checkbox" checked={!!done[i]} onChange={() => setDone({ ...done, [i]: !done[i] })} /><span style={{ textDecoration: done[i] ? 'line-through' : undefined, opacity: done[i] ? .6 : 1 }}>{o}</span></label></li>)}</ul>)}
+          <Panel title="Minhas campanhas" icon="flag" actions={<LinkButton to="/campanhas" size="sm">Ver todas</LinkButton>}>
+            {camps.loading && !camps.data ? <Loading what="campanhas" /> : camps.error ? <p className="muted">{camps.error}</p>
+              : !camps.data?.length ? <EmptyState icon="flag" title="Sem campanhas">Peça um convite ao seu mestre.</EmptyState>
+              : <ul className="list">{camps.data.map((c) => <li className="list-row" key={c.id}><div className="grow"><strong>{c.name}</strong></div><Badge tone={c.status === 'andamento' ? 'ok' : undefined}>{STATUS_LABEL[c.status]}</Badge></li>)}</ul>}
           </Panel>
-          <Panel title="Notificações" icon="bell">
-            {empty ? <p className="muted">Nenhuma notificação.</p> : <ul className="list">{notifications.map((n) => <li key={n.id} className="list-row"><div className="grow"><span>{n.text}</span><span className="muted small" style={{ display: 'block' }}>{n.when}</span></div></li>)}</ul>}
-          </Panel>
-          <Panel title="Diário pessoal" icon="feather">
-            <label className="sr-only" htmlFor="diary">Anotações pessoais</label>
-            <textarea id="diary" className="input" placeholder="Anote o que seu personagem descobriu…" value={note} onChange={(e) => setNote(e.target.value)} />
-            <div className="row row-between" style={{ marginTop: '.6rem' }}><span className="hint">Demonstração: não é salvo.</span>
-              <Button size="sm" disabled={!note.trim()} onClick={() => toast('Anotação não salva — persistência planejada para a próxima fase.')}>Salvar</Button></div>
-          </Panel>
-          <Panel title="Histórico de rolagens" icon="dice" actions={<DemoBadge text="Exemplo" />}>
-            {empty ? <p className="muted">Nenhuma rolagem registrada.</p> : <ul className="list">{rollHistory.map((r, i) => <li key={i} className="list-row"><div className="grow"><strong>{r.what}</strong><span className="muted small">{r.when}</span></div><Badge>{r.result}</Badge></li>)}</ul>}
-            <p className="hint" style={{ margin: '.5rem 0 0' }}>A plataforma ainda não rola dados.</p>
+          <Panel title="Em breve" icon="hourglass" quiet>
+            <p className="dim" style={{ margin: 0 }}>Missões, mapas e regiões reveladas, diário, histórico de rolagens e notificações chegam em fases futuras. Nada disso é exibido aqui até existir de verdade.</p>
           </Panel>
         </div>
       </div>
+      {creating && camps.data && <NewCharacter campaigns={camps.data} onClose={() => setCreating(false)} />}
     </>
   );
 }
 
-/* ================= FICHA DE PERSONAGEM ================= */
-const EQUIP_LABELS: Record<keyof typeof ch.equipment, string> = { armas: 'Armas', protecoes: 'Armaduras e proteções', amuletos: 'Amuletos e acessórios', consumiveis: 'Consumíveis', especiais: 'Itens especiais' };
+/* ================= FICHA ================= */
+type Draft = { name: string; stage: number; sheet: Sheet };
+const same = (a: Draft, c: Character) => JSON.stringify(a) === JSON.stringify({ name: c.name, stage: c.stage, sheet: c.sheet });
 
-export function CharacterSheetPage() {
+function SheetEditor({ ch, canStage, onSaved }: { ch: Character; canStage: boolean; onSaved: (c: Character) => void }) {
   const { query } = useRoute();
-  const { empty } = useDemo();
-  const planned = usePlanned();
+  const toast = useToast();
   const tab = (SHEET_TABS.find((t) => t.id === query.get('aba'))?.id ?? 'identidade') as SheetTab;
-  const [filter, setFilter] = useState<'todas' | 'disponiveis' | 'indisponiveis'>('todas');
-  const relevant = quests.filter((q) => q.visibility === 'jogadores');
-  const abilities = ch.abilities.filter((a) => filter === 'todas' || (filter === 'disponiveis' ? a.ok : !a.ok));
+  const [d, setD] = useState<Draft>({ name: ch.name, stage: ch.stage, sheet: ch.sheet });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setD({ name: ch.name, stage: ch.stage, sheet: ch.sheet }); }, [ch]);
+  const dirty = !same(d, ch);
+  const upd = (patch: Partial<Sheet>) => setD((x) => ({ ...x, sheet: { ...x.sheet, ...patch } }));
+  const setTab = (id: SheetTab) => navigate(`/jogador/ficha?id=${ch.id}&aba=${id}`);
 
-  if (empty) return (<><PageHead eyebrow="Ficha de personagem" title="Ficha" /><Panel><EmptyState icon="sheet" title="Nenhuma ficha disponível" action={<LinkButton to="/campanhas" variant="primary">Ver campanhas</LinkButton>}>Você ainda não tem um personagem. A criação de fichas chega em uma fase futura.</EmptyState></Panel></>);
+  const save = async () => {
+    if (!d.name.trim()) { setError('O nome do personagem não pode ficar vazio.'); return; }
+    setSaving(true); setError(null);
+    try {
+      const patch: { name: string; sheet: Sheet; stage?: number } = { name: d.name, sheet: d.sheet };
+      if (canStage && d.stage !== ch.stage) patch.stage = d.stage;   // o banco recusa se você não administra a campanha
+      onSaved(await updateCharacter(ch.id, patch)); toast('Ficha salva.', 'ok');
+    } catch (x) { setError(friendlyError(x)); } finally { setSaving(false); }
+  };
+  const num = (id: string, label: string, value: number, set: (n: number) => void, max = 999) => (
+    <div className="field"><label htmlFor={id}>{label}</label><input id={id} className="input" type="number" inputMode="numeric" min={0} max={max} value={value} onChange={(e) => set(clampInt(e.target.value, 0, max, 0))} /></div>);
+  const txt = (id: string, label: string, value: string, set: (s: string) => void, max: number, area = false) => (
+    <div className="field"><label htmlFor={id}>{label}</label>{area ? <textarea id={id} className="input" maxLength={max} value={value} onChange={(e) => set(e.target.value)} /> : <input id={id} className="input" maxLength={max} value={value} onChange={(e) => set(e.target.value)} />}</div>);
 
   return (
     <>
-      <PageHead eyebrow="Ficha de personagem" title={ch.short} actions={<><DemoBadge /><Button icon="feather" onClick={() => planned('Editar ficha')}>Editar ficha</Button></>}>
-        Todos os valores desta ficha são fictícios e não possuem fórmulas reais. Edição e salvamento são planejados para a próxima fase.
-      </PageHead>
+      <div className="row row-between" style={{ marginBottom: '.8rem' }}>
+        <div className="row"><Badge tone="accent"><Icon name="star" /> Estágio {ch.stage}</Badge>{dirty && <Badge tone="bad">Alterações não salvas</Badge>}</div>
+        <div className="row"><Button variant="ghost" disabled={!dirty || saving} onClick={() => setD({ name: ch.name, stage: ch.stage, sheet: ch.sheet })}>Descartar</Button><Button variant="primary" icon="check" loading={saving} disabled={!dirty} onClick={save}>Salvar ficha</Button></div>
+      </div>
+      {error && <div style={{ marginBottom: '.8rem' }}><Alert tone="bad">{error}</Alert></div>}
       <div className="sheet-grid">
-        <aside className="stack sheet-side">
-          <Panel>
-            <Crest compact />
-            <hr className="divider" />
-            <div className="stack-sm"><Meter label="PV" kind="pv" now={ch.pv.now} max={ch.pv.max} /><Meter label="ALMA" kind="alma" now={ch.alma.now} max={ch.alma.max} /></div>
-            <div className="row" style={{ marginTop: '.8rem' }}><Badge><Icon name="shield" /> Defesa {ch.defense}</Badge>{ch.conditions.map((c) => <Badge key={c.name} tone="accent">{c.name}</Badge>)}</div>
-          </Panel>
-        </aside>
+        <aside className="stack sheet-side"><Panel>
+          <div className="crest"><div className="portrait" aria-hidden="true"><MaskGlyph className="mask" /></div><div><div className="crest-name">{d.name || 'Sem nome'}</div><div className="muted small">Estágio {ch.stage}</div></div></div>
+          <hr className="divider" /><div className="stack-sm"><Meter label="PV" kind="pv" now={d.sheet.pv.now} max={d.sheet.pv.max} /><Meter label="ALMA" kind="alma" now={d.sheet.alma.now} max={d.sheet.alma.max} /></div>
+          <div className="row" style={{ marginTop: '.8rem' }}><Badge><Icon name="shield" /> Defesa {d.sheet.defense}</Badge></div>
+        </Panel></aside>
         <div>
-          <Tabs<SheetTab> label="Seções da ficha" items={SHEET_TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))} value={tab} onChange={(id) => navigate(`/jogador/ficha?aba=${id}`)} />
+          <Tabs<SheetTab> label="Seções da ficha" items={SHEET_TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))} value={tab} onChange={setTab} />
           <TabPanel id={tab}>
-            {tab === 'identidade' && (
-              <div className="grid cols-2">
-                <Panel title="Identidade" icon="user"><dl className="kv"><dt>Nome</dt><dd>{ch.name}</dd><dt>Conceito</dt><dd>{ch.concept}</dd><dt>Progressão</dt><dd>{ch.stage}</dd><dt>Arquétipo</dt><dd>{ch.archetype}</dd><dt>Origem</dt><dd>{ch.origin}</dd><dt>Campanha</dt><dd><Link to="/campanhas">{ch.campaign}</Link></dd></dl></Panel>
-                <Panel title="Retrato" icon="mask" quiet><div className="portrait-big" aria-hidden="true"><MaskGlyph className="mask" /></div><p className="hint center" style={{ margin: 0 }}>Espaço para ilustração. Upload de imagem: planejado.</p></Panel>
-              </div>)}
-            {tab === 'atributos' && (
-              <div className="stack">
-                <Alert tone="warn">Lista e valores <strong>demonstrativos</strong>. Os atributos reais e as fórmulas de modificadores ainda não foram definidos.</Alert>
-                <div className="attrs">{ch.attributes.map((a) => (
-                  <details key={a.key} className="attr"><summary><span className="attr-name">{a.key}</span><span className="attr-val">{a.value}</span><Badge>{a.mod}</Badge></summary><p className="dim small" style={{ margin: '.6rem 0 0' }}>{a.note} <span className="muted">(descrição de exemplo)</span></p></details>))}</div>
-              </div>)}
-            {tab === 'combate' && (
-              <div className="grid cols-2">
-                <Panel title="Sobrevivência" icon="heart"><div className="stack"><Meter label="PV — pontos de vida" kind="pv" now={ch.pv.now} max={ch.pv.max} /><Meter label="ALMA" kind="alma" now={ch.alma.now} max={ch.alma.max} /><dl className="kv"><dt>Defesa</dt><dd>{ch.defense} <span className="muted small">(valor de exemplo; regra ainda não definida)</span></dd></dl>
-                  <Button size="sm" onClick={() => planned('Ajustar PV/ALMA')}>Ajustar valores</Button></div></Panel>
-                <Panel title="Condições e estados" icon="alert"><ul className="list">{ch.conditions.map((c) => <li className="list-row" key={c.name}><Badge tone="accent">{c.name}</Badge><span className="dim small grow">{c.note}</span></li>)}</ul>
-                  <div className="row" style={{ marginTop: '.6rem' }}><Badge>Em combate: não</Badge><Badge>Descanso: pendente</Badge></div></Panel>
-              </div>)}
-            {tab === 'habilidades' && (
-              <div className="stack">
-                <div className="row row-between"><Seg value={filter} onChange={setFilter} label="Filtrar habilidades" items={[{ id: 'todas', label: 'Todas' }, { id: 'disponiveis', label: 'Disponíveis' }, { id: 'indisponiveis', label: 'Indisponíveis' }]} /><span className="hint">Sem cálculos reais de custo.</span></div>
-                {abilities.length === 0 ? <EmptyState icon="spark" title="Nenhuma habilidade neste filtro" /> : (
-                  <div className="grid cols-2">{abilities.map((a) => (
-                    <Panel key={a.name} className={a.ok ? '' : 'locked'} title={a.name} icon={a.ok ? 'spark' : 'lock'} actions={<Badge tone={a.ok ? 'ok' : undefined}>{a.ok ? 'Disponível' : 'Indisponível'}</Badge>}>
-                      <p className="dim">{a.text}</p><div className="row"><Badge>Custo: {a.cost}</Badge><span className="muted small">Requisito: {a.req}</span></div></Panel>))}</div>)}
-              </div>)}
-            {tab === 'equipamento' && (
-              <div className="stack">{(Object.keys(ch.equipment) as (keyof typeof ch.equipment)[]).map((k) => (
-                <details key={k} className="acc" open={k === 'armas' || k === 'consumiveis'}><summary><Icon name="chevron" className="acc-chev" /> {EQUIP_LABELS[k]} <Badge>{ch.equipment[k].length}</Badge></summary>
-                  <ul className="list">{ch.equipment[k].map((it) => <li className="list-row" key={it.name}><div className="grow"><strong>{it.name}</strong><span className="dim small">{it.text}</span></div><Badge>×{it.qty}</Badge></li>)}</ul></details>))}</div>)}
-            {tab === 'narrativa' && (
-              <div className="grid cols-2">
-                <Panel title="História e personalidade" icon="feather"><p>{ch.history}</p><p className="dim"><strong>Personalidade:</strong> {ch.personality}</p></Panel>
-                <Panel title="Anotações e características" icon="book"><ul>{ch.notes.map((n) => <li key={n}>{n}</li>)}</ul></Panel>
-                <Panel title="Missões relevantes" icon="flag"><ul className="list">{relevant.map((q) => <li className="list-row" key={q.id}><div className="grow"><strong>{q.title}</strong></div><Badge tone={q.status === 'Concluída' ? 'ok' : 'accent'}>{q.status}</Badge></li>)}</ul></Panel>
-                <Panel title="Resumo de progressão" icon="hourglass"><ol className="timeline">{ch.progression.map((p) => <li key={p.when}><strong>{p.when}</strong><span className="dim"> — {p.what}</span></li>)}</ol></Panel>
-              </div>)}
+            {tab === 'identidade' && <Panel title="Identidade" icon="user"><div className="stack">
+              {txt('f-name', 'Nome do personagem', d.name, (v) => setD({ ...d, name: v }), 80)}
+              {txt('f-concept', 'Conceito', d.sheet.concept, (v) => upd({ concept: v }), 300)}
+              <div className="grid cols-2">{txt('f-arch', 'Arquétipo', d.sheet.archetype, (v) => upd({ archetype: v }), 80)}{txt('f-origin', 'Origem', d.sheet.origin, (v) => upd({ origin: v }), 80)}</div>
+              {canStage ? num('f-stage', 'Estágio (progressão)', d.stage, (n) => setD({ ...d, stage: Math.max(1, Math.min(20, n)) }), 20)
+                : <p className="hint" style={{ margin: 0 }}>O estágio (progressão) só pode ser alterado pelo mestre da campanha.</p>}
+            </div></Panel>}
+            {tab === 'atributos' && <div className="stack"><Alert tone="warn">Lista de atributos <strong>provisória</strong>: o sistema de regras ainda não foi definido e nada é calculado automaticamente.</Alert>
+              <div className="attrs">{ATTRIBUTES.map((a, i) => <div className="attr" key={a} style={{ padding: '.7rem .9rem' }}>{num(`f-attr-${i}`, a, d.sheet.attributes[a], (n) => upd({ attributes: { ...d.sheet.attributes, [a]: n } }), 30)}</div>)}</div></div>}
+            {tab === 'combate' && <Panel title="Combate e sobrevivência" icon="heart"><div className="grid cols-2">
+              {num('f-pv-now', 'PV atual', d.sheet.pv.now, (n) => upd({ pv: { ...d.sheet.pv, now: Math.min(n, d.sheet.pv.max) } }))}{num('f-pv-max', 'PV máximo', d.sheet.pv.max, (n) => upd({ pv: { max: n, now: Math.min(d.sheet.pv.now, n) } }))}
+              {num('f-alma-now', 'ALMA atual', d.sheet.alma.now, (n) => upd({ alma: { ...d.sheet.alma, now: Math.min(n, d.sheet.alma.max) } }))}{num('f-alma-max', 'ALMA máxima', d.sheet.alma.max, (n) => upd({ alma: { max: n, now: Math.min(d.sheet.alma.now, n) } }))}
+              {num('f-def', 'Defesa', d.sheet.defense, (n) => upd({ defense: n }), 99)}</div>
+              <p className="hint">Sem cálculo automático de dano ou recuperação nesta fase.</p></Panel>}
+            {(tab === 'habilidades' || tab === 'equipamento') && <Panel title={tab === 'habilidades' ? 'Habilidades' : 'Equipamento e inventário'} icon={tab === 'habilidades' ? 'spark' : 'pack'}>
+              {(tab === 'habilidades' ? d.sheet.abilities : d.sheet.equipment).length === 0
+                ? <EmptyState icon={tab === 'habilidades' ? 'spark' : 'pack'} title="Nada cadastrado">A edição de {tab === 'habilidades' ? 'habilidades' : 'itens'} chega em uma fase futura.</EmptyState>
+                : <pre className="small" style={{ overflow: 'auto' }}>{JSON.stringify(tab === 'habilidades' ? d.sheet.abilities : d.sheet.equipment, null, 2)}</pre>}</Panel>}
+            {tab === 'narrativa' && <Panel title="Narrativa" icon="feather"><div className="stack">
+              {txt('f-hist', 'História', d.sheet.history, (v) => upd({ history: v }), 5000, true)}{txt('f-pers', 'Personalidade', d.sheet.personality, (v) => upd({ personality: v }), 1000)}{txt('f-notes', 'Anotações', d.sheet.notes, (v) => upd({ notes: v }), 5000, true)}</div></Panel>}
           </TabPanel>
         </div>
       </div>
     </>
   );
+}
+
+export function CharacterSheetPage() {
+  const { query } = useRoute();
+  const { profile } = useAuth();
+  const id = query.get('id');
+  const camps = useAsync(listCampaigns, []);
+  const chars = useAsync(listCharacters, [id]);
+  const one = useAsync(() => (id ? getCharacter(id) : Promise.resolve(null)), [id]);
+  const [creating, setCreating] = useState(false);
+  const [saved, setSaved] = useState<Character | null>(null);
+  useEffect(() => setSaved(null), [id]);
+
+  if (!id) {
+    const mine = (chars.data ?? []).filter((c) => c.owner_id === profile!.id);
+    const byId = new Map((camps.data ?? []).map((c) => [c.id, c]));
+    return (<>
+      <PageHead eyebrow="Ficha de personagem" title="Minhas fichas" actions={<Button variant="primary" icon="plus" disabled={!camps.data?.length} onClick={() => setCreating(true)}>Novo personagem</Button>}>Escolha um personagem para abrir ou editar.</PageHead>
+      {chars.loading && !chars.data ? <Panel><Loading what="fichas" /></Panel> : chars.error ? <Panel><EmptyState icon="alert" title="Não foi possível carregar" action={<Button onClick={chars.reload}>Tentar de novo</Button>}>{chars.error}</EmptyState></Panel>
+        : !mine.length ? <Panel><EmptyState icon="sheet" title="Você ainda não tem fichas">{camps.data?.length ? 'Crie um personagem em uma das suas campanhas.' : 'Entre em uma campanha com um convite para criar seu personagem.'}</EmptyState></Panel>
+        : <div className="grid cols-2">{mine.map((c) => <CharCard key={c.id} c={c} campaign={byId.get(c.campaign_id)} />)}</div>}
+      {creating && camps.data && <NewCharacter campaigns={camps.data} onClose={() => setCreating(false)} />}
+    </>);
+  }
+  const ch = saved ?? one.data;
+  if (one.loading && !ch) return <><PageHead eyebrow="Ficha de personagem" title="Ficha" /><Panel><Loading what="ficha" /></Panel></>;
+  if (one.error) return <><PageHead eyebrow="Ficha de personagem" title="Ficha" /><Panel><EmptyState icon="alert" title="Não foi possível carregar a ficha" action={<Button onClick={one.reload}>Tentar de novo</Button>}>{one.error}</EmptyState></Panel></>;
+  if (!ch) return <><PageHead eyebrow="Ficha de personagem" title="Ficha" /><Panel><EmptyState icon="lock" title="Ficha não encontrada" action={<LinkButton to="/jogador/ficha">Minhas fichas</LinkButton>}>Ela não existe ou você não tem permissão para vê-la.</EmptyState></Panel></>;
+  return (<>
+    <PageHead eyebrow="Ficha de personagem" title={ch.name} actions={<Link to="/jogador/ficha">← Minhas fichas</Link>}>{ch.owner_id === profile!.id ? 'Suas alterações são salvas no banco quando você clica em “Salvar ficha”.' : 'Você está vendo a ficha de outro participante como mestre da campanha.'}</PageHead>
+    <SheetEditor key={ch.id} ch={ch} canStage={profile!.role === 'mestre' && ch.owner_id !== profile!.id} onSaved={setSaved} />
+  </>);
 }

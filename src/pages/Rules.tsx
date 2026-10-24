@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, navigate } from '../app/router';
-import { useDemo } from '../app/demo';
+import { useAuth } from '../app/auth';
 import { Alert, Badge, EmptyState, LinkButton, PageHead, Panel } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { articles, articlesOf, categories, categoryBySlug, findArticle, PROVISORIO, type Article, type Block } from '../data/rules';
@@ -27,7 +27,7 @@ function Locked({ title }: { title: string }) {
 }
 
 export function RulesPage({ cat, art }: { cat?: string; art?: string }) {
-  const { role } = useDemo();
+  const role = useAuth().profile?.role;
   const isMaster = role === 'mestre';
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [cat, art]); // navegar (ex.: abrir um resultado) encerra a pesquisa

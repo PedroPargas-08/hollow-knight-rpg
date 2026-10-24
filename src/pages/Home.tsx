@@ -2,7 +2,7 @@ import { LinkButton, Panel } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { MaskGlyph } from '../components/domain';
 import { Link } from '../app/router';
-import { APP_NAME, APP_TAGLINE } from '../data/demo';
+import { APP_NAME, APP_TAGLINE } from '../data/brand';
 import { categories } from '../data/rules';
 import type { IconName } from '../types';
 
@@ -31,7 +31,7 @@ export function HomePage() {
           <LinkButton to="/cadastro" icon="user">Criar conta</LinkButton>
           <Link to="/regras" className="hero-link">Consultar as regras públicas →</Link>
         </div>
-        <span className="badge badge-demo" style={{ marginTop: '1.2rem' }}>Nome provisório · demonstração da Fase 1</span>
+        <span className="badge badge-demo" style={{ marginTop: '1.2rem' }}>Nome provisório · Fase 2</span>
       </section>
 
       <div className="pub-wrap">

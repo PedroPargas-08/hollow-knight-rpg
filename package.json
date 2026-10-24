@@ -1,20 +1,22 @@
 {
   "name": "valdrim-rpg",
-  "version": "0.1.0-fase1",
+  "version": "0.2.0-fase2",
   "private": true,
-  "description": "Valdrim — plataforma web (nome provisório) para administrar e jogar campanhas de RPG de mesa. Fase 1: interface e navegação demonstrativas.",
+  "description": "Valdrim — plataforma web (nome provisório) para campanhas de RPG de mesa. Fase 2: autenticação, banco de dados e RLS (Supabase).",
   "type": "module",
   "scripts": {
     "dev": "node build.mjs --serve",
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test tests/unit/*.test.ts",
-    "test:e2e": "node tests/e2e/run.cjs",
-    "test": "npm run test:unit && npm run build && npm run test:e2e"
+    "test:e2e": "node -e \"process.env.FAKE_SUPABASE='1'; import('./build.mjs')\" && node tests/e2e/run.cjs",
+    "test": "npm run test:unit && npm run test:e2e",
+    "build:test": "FAKE_SUPABASE=1 node build.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@supabase/supabase-js": "^2.45.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
