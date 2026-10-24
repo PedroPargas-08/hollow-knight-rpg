@@ -12,7 +12,7 @@ import type { IconName } from '../types';
 
 export function NotFoundPage() {
   return (
-    <div className="pub-wrap"><Panel><EmptyState icon="compass" title="Esta região ainda não foi mapeada" action={<LinkButton to="/" variant="primary">Voltar ao início</LinkButton>}>A página que você procura não existe nesta demonstração.</EmptyState></Panel></div>
+    <div className="pub-wrap"><Panel><EmptyState icon="compass" title="Esta região ainda não foi mapeada" action={<LinkButton to="/" variant="primary">Voltar ao início</LinkButton>}>A página que você procura não existe nesta versão da plataforma.</EmptyState></Panel></div>
   );
 }
 
@@ -65,7 +65,7 @@ export function ProfilePage() {
   };
   return (
     <>
-      <PageHead eyebrow="Conta" title="Perfil e configurações">Seu nome de exibição é salvo no banco. As preferências visuais valem apenas enquanto a página estiver aberta.</PageHead>
+      <PageHead eyebrow="Conta" title="Perfil e configurações">Seu nome de exibição é salvo no banco. Suas preferências visuais ficam salvas neste navegador e continuam disponíveis após recarregar a página.</PageHead>
       <div className="grid cols-2">
         <Panel title="Conta" icon="user" actions={<Badge tone="accent">{profile?.role === 'mestre' ? 'Mestre' : 'Jogador'}</Badge>}>
           <form className="stack" onSubmit={save} noValidate>
