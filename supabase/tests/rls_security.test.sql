@@ -54,14 +54,14 @@ begin
     (28,'ma','hash do convite nao e legivel',$q$select token_hash from public.campaign_invites$q$,'deny'),
     (29,'ja','jogador nao ve convites',$q$select count(*) from public.campaign_invites$q$,'val:0'),
     (30,'postgres','token em texto puro nao e guardado',$q$select count(*) from public.campaign_invites where token_hash='{tok1}'$q$,'val:0'),
-    (31,'oc','nao-mestre nao resgata convite co_mestre',$q$select public.redeem_campaign_invite('{tok3}')$q$,'deny'),
-    (32,'postgres','convite co_mestre nao foi consumido',$q$select (used_at is null)::text from public.campaign_invites where member_role='co_mestre'$q$,'val:true'),
+    (31,'oc','jogador comum ainda nao ve campanha A',$q$select count(*) from public.campaigns where id='{cidA}'$q$,'val:0'),
+    (32,'postgres','convite co_mestre continua disponivel',$q$select (used_at is null)::text from public.campaign_invites where token_hash=encode(sha256(convert_to('{tok3}','utf8')),'hex')$q$,'val:true'),
     (33,'postgres','insere convite ja expirado',$q$insert into public.campaign_invites(campaign_id,token_hash,created_by,expires_at) values ('{cidA}',encode(sha256(convert_to('expirado','utf8')),'hex'),'{ma}',now()-interval '1 hour')$q$,'n=1'),
     (34,'oc','convite expirado recusado',$q$select public.redeem_campaign_invite('expirado')$q$,'deny'),
-    (35,'ja','jogador A resgata convite 1',$q$select public.redeem_campaign_invite('{tok1}')$q$,'ok'),
+    (35,'ja','jogador A resgata convite 1',$q$select public.redeem_campaign_invite('{tok1}') = '{cidA}'::uuid$q$,'val:true'),
     (36,'ja','reuso do convite recusado',$q$select public.redeem_campaign_invite('{tok1}')$q$,'deny'),
     (37,'jb','convite ja usado por outro recusado',$q$select public.redeem_campaign_invite('{tok1}')$q$,'deny'),
-    (38,'jb','jogador B resgata convite 2',$q$select public.redeem_campaign_invite('{tok2}')$q$,'ok'),
+    (38,'jb','jogador B resgata convite 2',$q$select public.redeem_campaign_invite('{tok2}') = '{cidA}'::uuid$q$,'val:true'),
     (39,'postgres','campanha A tem 2 membros',$q$select count(*) from public.campaign_members where campaign_id='{cidA}'$q$,'val:2'),
     (40,'ja','jogador A ve a campanha',$q$select count(*) from public.campaigns$q$,'val:1'),
     (41,'jb','jogador B ve a campanha',$q$select count(*) from public.campaigns$q$,'val:1'),
@@ -74,19 +74,19 @@ begin
     (48,'ja','jogador nao edita campanha',$q$update public.campaigns set name='Hackeada' where id='{cidA}'$q$,'zero'),
     (49,'ja','jogador nao apaga campanha',$q$delete from public.campaigns where id='{cidA}'$q$,'zero'),
     (50,'postgres','campanha A intacta',$q$select name from public.campaigns where id='{cidA}'$q$,'val:Campanha A'),
-    (51,'ja','A cria sua ficha',$q$insert into public.characters(campaign_id,name,sheet) values ('{cidA}','Ilvane','{"vigor":8}') returning id$q$,'cap:chA'),
+    (51,'ja','A cria sua ficha',$q$insert into public.characters(campaign_id,name,sheet) values ('{cidA}','Ilvane','{"concept":"","archetype":"","origin":"","attributes":{"Vigor":10,"Agilidade":10,"Intelecto":10,"Percepção":10,"Presença":10,"Vontade":10},"pv":{"now":10,"max":10},"alma":{"now":5,"max":5},"defense":10,"history":"","personality":"","notes":"","abilities":[],"equipment":[]}') returning id$q$,'cap:chA'),
     (52,'postgres','owner da ficha vem do token',$q$select (owner_id::text='{ja}')::text from public.characters where id='{chA}'$q$,'val:true'),
     (53,'ja','A nao cria ficha com progressao 5',$q$insert into public.characters(campaign_id,name,stage) values ('{cidA}','Cheat',5)$q$,'deny'),
     (54,'ja','A nao cria ficha em nome de B',$q$insert into public.characters(campaign_id,name,owner_id) values ('{cidA}','Roubo','{jb}')$q$,'deny'),
     (55,'ja','A nao cria ficha na campanha B',$q$insert into public.characters(campaign_id,name) values ('{cidB}','Intrusa')$q$,'deny'),
-    (56,'jb','B cria sua ficha',$q$insert into public.characters(campaign_id,name) values ('{cidA}','Corvina') returning id$q$,'cap:chB'),
+    (56,'jb','B cria sua ficha',$q$insert into public.characters(campaign_id,name,sheet) values ('{cidA}','Corvina','{"concept":"","archetype":"","origin":"","attributes":{"Vigor":10,"Agilidade":10,"Intelecto":10,"Percepção":10,"Presença":10,"Vontade":10},"pv":{"now":10,"max":10},"alma":{"now":5,"max":5},"defense":10,"history":"","personality":"","notes":"","abilities":[],"equipment":[]}') returning id$q$,'cap:chB'),
     (57,'ja','A ve so a propria ficha',$q$select count(*) from public.characters$q$,'val:1'),
     (58,'jb','B ve so a propria ficha',$q$select count(*) from public.characters$q$,'val:1'),
     (59,'oc','estranho nao ve fichas',$q$select count(*) from public.characters$q$,'val:0'),
     (60,'mb','mestre B nao ve fichas da campanha A',$q$select count(*) from public.characters$q$,'val:0'),
     (61,'ma','mestre A ve as 2 fichas',$q$select count(*) from public.characters$q$,'val:2'),
-    (62,'ja','A atualiza a propria ficha',$q$update public.characters set sheet='{"vigor":9}' where id='{chA}'$q$,'n=1'),
-    (63,'postgres','alteracao persistiu',$q$select sheet->>'vigor' from public.characters where id='{chA}'$q$,'val:9'),
+    (62,'ja','A atualiza a propria narrativa',$q$update public.characters set sheet=jsonb_set(sheet,'{history}',to_jsonb('Historia atualizada'::text)) where id='{chA}'$q$,'n=1'),
+    (63,'postgres','alteracao narrativa persistiu',$q$select sheet->>'history' from public.characters where id='{chA}'$q$,'val:Historia atualizada'),
     (64,'ja','A nao altera ficha de B (trocando o id)',$q$update public.characters set name='Pwn' where id='{chB}'$q$,'zero'),
     (65,'jb','B nao altera ficha de A (trocando o id)',$q$update public.characters set name='Pwn' where id='{chA}'$q$,'zero'),
     (66,'ja','A nao transfere ficha (owner_id)',$q$update public.characters set owner_id='{jb}' where id='{chA}'$q$,'deny'),
@@ -95,13 +95,15 @@ begin
     (69,'ja','A nao apaga ficha de B',$q$delete from public.characters where id='{chB}'$q$,'zero'),
     (70,'postgres','ficha de B intacta',$q$select name from public.characters where id='{chB}'$q$,'val:Corvina'),
     (71,'postgres','ficha de A sem tomada de posse',$q$select (owner_id::text='{ja}' and campaign_id::text='{cidA}' and stage=1)::text from public.characters where id='{chA}'$q$,'val:true'),
-    (72,'ma','mestre A atualiza ficha de jogador',$q$update public.characters set sheet='{"nota":"gm"}' where id='{chB}'$q$,'n=1'),
+    (72,'ma','mestre A atualiza defesa da ficha',$q$update public.characters set sheet=jsonb_set(sheet,'{defense}','12'::jsonb) where id='{chB}'$q$,'n=1'),
     (73,'ma','mestre A altera progressao',$q$update public.characters set stage=3 where id='{chB}'$q$,'n=1'),
     (74,'ma','mestre A nao muda o dono da ficha',$q$update public.characters set owner_id='{ma}' where id='{chB}'$q$,'deny'),
     (75,'mb','mestre B nao edita fichas de A',$q$update public.characters set name='X' where id='{chA}'$q$,'zero'),
     (76,'mb','mestre B nao edita campanha A',$q$update public.campaigns set name='X' where id='{cidA}'$q$,'zero'),
     (77,'mb','mestre B nao ve membros de A',$q$select count(*) from public.campaign_members$q$,'val:0'),
-    (78,'mb','mestre B cria ficha na propria campanha',$q$insert into public.characters(campaign_id,name) values ('{cidB}','Chefe B')$q$,'n=1'),
+
+(78,'mb','mestre B cria ficha na propria campanha',$q$insert into public.characters(campaign_id,name,sheet) values ('{cidB}','Chefe B','{"attributes":{"Vigor":10,"Agilidade":10,"Intelecto":10,"Percepção":10,"Presença":10,"Vontade":10},"defense":10,"pv":{"now":10,"max":10},"alma":{"now":5,"max":5},"abilities":[],"equipment":[]}'::jsonb)$q$,'n=1'),
+
     (79,'ma','mestre A nao ve campanha B',$q$select count(*) from public.campaigns where id='{cidB}'$q$,'val:0'),
     (80,'ma','mestre A nao ve fichas de B',$q$select count(*) from public.characters where campaign_id='{cidB}'$q$,'val:0'),
     (81,'ja','jogador A nao ve fichas de B',$q$select count(*) from public.characters where campaign_id='{cidB}'$q$,'val:0'),
@@ -113,7 +115,7 @@ begin
     (87,'jb','B removido nao ve a propria ficha',$q$select count(*) from public.characters$q$,'val:0'),
     (88,'jb','B removido nao edita a ficha',$q$update public.characters set name='X' where id='{chB}'$q$,'zero'),
     (89,'postgres','ficha de B preservada',$q$select count(*) from public.characters where id='{chB}'$q$,'val:1'),
-    (90,'mb','mestre B resgata convite co_mestre',$q$select public.redeem_campaign_invite('{tok3}')$q$,'ok'),
+    (90,'mb','mestre B resgata convite co_mestre',$q$select public.redeem_campaign_invite('{tok3}') = '{cidA}'::uuid$q$,'val:true'),
     (91,'mb','co_mestre edita a campanha A',$q$update public.campaigns set description='co-mestre' where id='{cidA}'$q$,'n=1'),
     (92,'mb','co_mestre ve fichas de A',$q$select count(*) from public.characters where campaign_id='{cidA}'$q$,'val:2'),
     (93,'mb','co_mestre nao concede co_mestre',$q$select public.create_campaign_invite('{cidA}','co_mestre',24)$q$,'deny'),
@@ -122,7 +124,28 @@ begin
     (96,'mb','ex-co_mestre perde acesso a A',$q$select count(*) from public.campaigns where id='{cidA}'$q$,'val:0'),
     (97,'postgres','admin rebaixa Mestre B',$q$select private.admin_set_role('{mb}','jogador')$q$,'ok'),
     (98,'mb','rebaixado nao cria campanha',$q$insert into public.campaigns(name) values ('Pos-rebaixamento')$q$,'deny'),
-    (99,'mb','rebaixado perde admin da propria campanha',$q$update public.campaigns set name='X' where id='{cidB}'$q$,'zero')
+    (99,'mb','dono rebaixado ainda administra sua campanha',$q$update public.campaigns set name='X' where id='{cidB}'$q$,'n=1'),
+    (100,'ja','A altera PV atual',$q$update public.characters set sheet=jsonb_set(sheet,'{pv,now}','7'::jsonb) where id='{chA}'$q$,'n=1'),
+    (101,'ja','A altera ALMA atual',$q$update public.characters set sheet=jsonb_set(sheet,'{alma,now}','3'::jsonb) where id='{chA}'$q$,'n=1'),
+    (102,'ja','A nao altera atributo',$q$update public.characters set sheet=jsonb_set(sheet,'{attributes,Vigor}','11'::jsonb) where id='{chA}'$q$,'deny'),
+    (103,'ja','A nao altera defesa',$q$update public.characters set sheet=jsonb_set(sheet,'{defense}','11'::jsonb) where id='{chA}'$q$,'deny'),
+    (104,'ja','A nao altera PV maximo',$q$update public.characters set sheet=jsonb_set(sheet,'{pv,max}','11'::jsonb) where id='{chA}'$q$,'deny'),
+    (105,'ja','A nao altera ALMA maxima',$q$update public.characters set sheet=jsonb_set(sheet,'{alma,max}','6'::jsonb) where id='{chA}'$q$,'deny'),
+    (106,'ja','A nao altera habilidades',$q$update public.characters set sheet=jsonb_set(sheet,'{abilities}','[{"name":"Hack"}]'::jsonb) where id='{chA}'$q$,'deny'),
+    (107,'ja','A nao altera equipamentos',$q$update public.characters set sheet=jsonb_set(sheet,'{equipment}','[{"name":"Hack"}]'::jsonb) where id='{chA}'$q$,'deny'),
+    (108,'ja','A nao define PV acima do maximo',$q$update public.characters set sheet=jsonb_set(sheet,'{pv,now}','11'::jsonb) where id='{chA}'$q$,'deny'),
+    (109,'ja','A nao remove atributos',$q$update public.characters set sheet=sheet-'attributes' where id='{chA}'$q$,'deny'),
+    (110,'ma','mestre A pode alterar atributo',$q$update public.characters set sheet=jsonb_set(sheet,'{attributes,Vigor}','12'::jsonb) where id='{chB}'$q$,'n=1'),
+    (111,'ma','dono cria convite para co-mestre comum',$q$select public.create_campaign_invite('{cidA}','co_mestre',24)$q$,'cap:tok4'),
+    (112,'oc','usuario comum resgata convite co-mestre',$q$select public.redeem_campaign_invite('{tok4}') = '{cidA}'::uuid$q$,'val:true'),
+    (113,'oc','co-mestre comum ve fichas de A',$q$select count(*) from public.characters where campaign_id='{cidA}'$q$,'val:2'),
+    (114,'oc','co-mestre comum nao ve campanha B',$q$select count(*) from public.campaigns where id='{cidB}'$q$,'val:0'),
+    (115,'oc','co-mestre comum nao administra campanha B',$q$update public.campaigns set description='invasao' where id='{cidB}'$q$,'zero'),
+    (116,'oc','co-mestre comum nao concede outro co-mestre',$q$select public.create_campaign_invite('{cidA}','co_mestre',24)$q$,'deny'),
+    (117,'oc','co-mestre comum nao apaga campanha A',$q$delete from public.campaigns where id='{cidA}'$q$,'zero'),
+    (118,'ma','dono remove co-mestre comum',$q$delete from public.campaign_members where campaign_id='{cidA}' and user_id='{oc}'$q$,'n=1'),
+    (119,'oc','co-mestre removido perde acesso a A',$q$select count(*) from public.campaigns where id='{cidA}'$q$,'val:0'),
+    (120,'oc','co-mestre removido nao edita campanha A',$q$update public.campaigns set description='sem acesso' where id='{cidA}'$q$,'zero')
   ) as t(n, actor, name, sql, expect) order by n loop
     reset role;
     if s.actor = 'anon' then
@@ -136,7 +159,12 @@ begin
     for k in select jsonb_object_keys(ctx) loop q := replace(q, '{' || k || '}', ctx->>k); end loop;
     ok := null; detail := '';
     begin
-      if q ~ '\{[a-z0-9]+\}' then raise exception 'placeholder nao resolvido: %', substring(q from '\{[a-z0-9]+\}') using errcode = 'XX999'; end if;
+      if q ~ '\{(ma|mb|ja|jb|oc|cidA|cidB|chA|chB|tok1|tok2|tok3|tok4)\}' then
+  raise exception 'placeholder nao resolvido: %',
+    substring(q from '\{(ma|mb|ja|jb|oc|cidA|cidB|chA|chB|tok1|tok2|tok3|tok4)\}')
+    using errcode = 'XX999';
+end if;
+
       if s.expect like 'cap:%' or s.expect like 'val:%' then execute q into v; else execute q; get diagnostics n = row_count; end if;
       if s.expect = 'deny' then ok := false; detail := 'FOI PERMITIDO';
       elsif s.expect = 'zero' then ok := (n = 0); detail := 'linhas afetadas=' || n;

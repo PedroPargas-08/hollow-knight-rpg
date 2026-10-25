@@ -134,12 +134,13 @@ const PW = 'Senha1234';
     await go(p, '/jogador'); await p.getByRole('button', { name: 'Novo personagem' }).first().click(); await p.fill('#nch-name', 'Ilvane'); await p.getByRole('dialog').getByRole('button', { name: 'Criar', exact: true }).click();
     await hashRe(p, '^#/jogador/ficha\\?id='); charUrl = await p.evaluate(() => location.hash.slice(1)); await see(p, 'Estágio 1');
     await p.fill('#f-concept', 'Mapeia ruínas'); ok(await p.getByText('Alterações não salvas').first().isVisible(), 'indica não salvo');
-    await p.getByRole('tab', { name: 'Combate' }).click(); await p.fill('#f-pv-max', '24'); await p.fill('#f-pv-now', '18');
+    await p.getByRole('tab', { name: 'Combate' }).click(); await p.fill('#f-pv-now', '8');
     await p.getByRole('button', { name: 'Salvar ficha' }).click(); await see(p, 'Ficha salva.'); await shot(p, 'ficha-salva');
-    await p.reload(); await p.getByRole('tab', { name: 'Combate' }).click(); await p.waitForFunction(() => document.querySelector('#f-pv-now')?.value === '18');
-    ok((await p.inputValue('#f-pv-max')) === '24', 'PV máx persistiu'); await p.getByRole('tab', { name: 'Identidade' }).click(); await p.waitForFunction(() => document.querySelector('#f-concept')?.value === 'Mapeia ruínas');
+    await p.reload(); await p.getByRole('tab', { name: 'Combate' }).click(); await p.waitForFunction(() => document.querySelector('#f-pv-now')?.value === '8');
+    ok((await p.inputValue('#f-pv-max')) === '10', 'PV máximo permanece protegido'); await p.getByRole('tab', { name: 'Identidade' }).click(); await p.waitForFunction(() => document.querySelector('#f-concept')?.value === 'Mapeia ruínas');
   });
   await t('jogador não vê campo de progressão; falha de rede ao salvar preserva o rascunho', async () => {
+    await go(p, charUrl);
     ok((await p.locator('#f-stage').count()) === 0, 'sem campo de estágio'); await p.fill('#f-concept', 'Rascunho novo');
     await fake(p, () => { window.__fake.offline = true; }); await p.getByRole('button', { name: 'Salvar ficha' }).click(); await see(p, /Sem conexão/);
     ok((await p.inputValue('#f-concept')) === 'Rascunho novo', 'rascunho mantido'); await fake(p, () => { window.__fake.offline = false; });
