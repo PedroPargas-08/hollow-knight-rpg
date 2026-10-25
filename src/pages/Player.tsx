@@ -135,13 +135,135 @@ function SheetEditor({ ch, canStage, onSaved }: { ch: Character; canStage: boole
               {canStage ? num('f-stage', 'Estágio (progressão)', d.stage, (n) => setD({ ...d, stage: Math.max(1, Math.min(20, n)) }), 20)
                 : <p className="hint" style={{ margin: 0 }}>O estágio (progressão) só pode ser alterado pelo mestre da campanha.</p>}
             </div></Panel>}
-            {tab === 'atributos' && <div className="stack"><Alert tone="warn">Lista de atributos <strong>provisória</strong>: o sistema de regras ainda não foi definido e nada é calculado automaticamente.</Alert>
-              <div className="attrs">{ATTRIBUTES.map((a, i) => <div className="attr" key={a} style={{ padding: '.7rem .9rem' }}>{num(`f-attr-${i}`, a, d.sheet.attributes[a], (n) => upd({ attributes: { ...d.sheet.attributes, [a]: n } }), 30)}</div>)}</div></div>}
-            {tab === 'combate' && <Panel title="Combate e sobrevivência" icon="heart"><div className="grid cols-2">
-              {num('f-pv-now', 'PV atual', d.sheet.pv.now, (n) => upd({ pv: { ...d.sheet.pv, now: Math.min(n, d.sheet.pv.max) } }))}{num('f-pv-max', 'PV máximo', d.sheet.pv.max, (n) => upd({ pv: { max: n, now: Math.min(d.sheet.pv.now, n) } }))}
-              {num('f-alma-now', 'ALMA atual', d.sheet.alma.now, (n) => upd({ alma: { ...d.sheet.alma, now: Math.min(n, d.sheet.alma.max) } }))}{num('f-alma-max', 'ALMA máxima', d.sheet.alma.max, (n) => upd({ alma: { max: n, now: Math.min(d.sheet.alma.now, n) } }))}
-              {num('f-def', 'Defesa', d.sheet.defense, (n) => upd({ defense: n }), 99)}</div>
-              <p className="hint">Sem cálculo automático de dano ou recuperação nesta fase.</p></Panel>}
+            {tab === 'atributos' && <div className="stack">
+  <Alert tone="warn">
+    Lista de atributos provisória: o sistema de regras ainda não foi definido
+    e nada é calculado automaticamente.
+  </Alert>
+  <div className="attrs">
+    {ATTRIBUTES.map((a, i) => (
+      <div className="attr" key={a} style={{ padding: '.7rem .9rem' }}>
+        {canStage
+          ? num(
+              `f-attr-${i}`,
+              a,
+              d.sheet.attributes[a],
+              (n) => upd({
+                attributes: { ...d.sheet.attributes, [a]: n },
+              }),
+              30,
+            )
+          : <div className="field">
+              <label>{a}</label>
+              <input
+                className="input"
+                type="number"
+                value={d.sheet.attributes[a]}
+                readOnly
+                aria-label={`${a} (somente leitura)`}
+              />
+            </div>}
+      </div>
+    ))}
+  </div>
+</div>}
+            {tab === 'combate' && <Panel title="Combate e sobrevivência" icon="heart">
+  <div className="grid cols-2">
+    {num(
+      'f-pv-now',
+      'PV atual',
+      d.sheet.pv.now,
+      (n) => upd({
+        pv: {
+          ...d.sheet.pv,
+          now: Math.min(n, d.sheet.pv.max),
+        },
+      }),
+      d.sheet.pv.max,
+    )}
+
+    {canStage
+      ? num(
+          'f-pv-max',
+          'PV máximo',
+          d.sheet.pv.max,
+          (n) => upd({
+            pv: {
+              max: n,
+              now: Math.min(d.sheet.pv.now, n),
+            },
+          }),
+        )
+      : <div className="field">
+          <label htmlFor="f-pv-max">PV máximo</label>
+          <input
+            id="f-pv-max"
+            className="input"
+            type="number"
+            value={d.sheet.pv.max}
+            readOnly
+          />
+        </div>}
+
+    {num(
+      'f-alma-now',
+      'ALMA atual',
+      d.sheet.alma.now,
+      (n) => upd({
+        alma: {
+          ...d.sheet.alma,
+          now: Math.min(n, d.sheet.alma.max),
+        },
+      }),
+      d.sheet.alma.max,
+    )}
+
+    {canStage
+      ? num(
+          'f-alma-max',
+          'ALMA máxima',
+          d.sheet.alma.max,
+          (n) => upd({
+            alma: {
+              max: n,
+              now: Math.min(d.sheet.alma.now, n),
+            },
+          }),
+        )
+      : <div className="field">
+          <label htmlFor="f-alma-max">ALMA máxima</label>
+          <input
+            id="f-alma-max"
+            className="input"
+            type="number"
+            value={d.sheet.alma.max}
+            readOnly
+          />
+        </div>}
+
+    {canStage
+      ? num(
+          'f-def',
+          'Defesa',
+          d.sheet.defense,
+          (n) => upd({ defense: n }),
+          99,
+        )
+      : <div className="field">
+          <label htmlFor="f-def">Defesa</label>
+          <input
+            id="f-def"
+            className="input"
+            type="number"
+            value={d.sheet.defense}
+            readOnly
+          />
+        </div>}
+  </div>
+  <p className="hint">
+    Sem cálculo automático de dano ou recuperação nesta fase.
+  </p>
+</Panel>}
             {(tab === 'habilidades' || tab === 'equipamento') && <Panel title={tab === 'habilidades' ? 'Habilidades' : 'Equipamento e inventário'} icon={tab === 'habilidades' ? 'spark' : 'pack'}>
               {(tab === 'habilidades' ? d.sheet.abilities : d.sheet.equipment).length === 0
                 ? <EmptyState icon={tab === 'habilidades' ? 'spark' : 'pack'} title="Nada cadastrado">A edição de {tab === 'habilidades' ? 'habilidades' : 'itens'} chega em uma fase futura.</EmptyState>

@@ -14,14 +14,14 @@
     "build:test": "FAKE_SUPABASE=1 node build.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "@supabase/supabase-js": "^2.45.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "esbuild": "^0.27.0",
+    "esbuild": "^0.28.2",
     "playwright": "^1.56.0",
     "tsx": "^4.0.0",
     "typescript": "^6.0.0"
