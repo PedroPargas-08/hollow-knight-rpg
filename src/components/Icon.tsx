@@ -40,6 +40,13 @@ const PATHS: Record<IconName, string> = {
   back: 'M15 6l-6 6 6 6',
   logout: 'M10 4H5v16h5M15 8l4 4-4 4M19 12H9',
   mask: 'M12 3C8 3 5 5 5 9c0 6 3 11 7 12 4-1 7-6 7-12 0-4-3-6-7-6zM8.500 10l2.500 2M15.500 10L13 12M12 15v2',
+  armor: 'M12 3L2 7v10l10 4 10-4V7L12 3zM2 7l10 4 10-4M6 9v8M18 9v-8',
+  crosshair: 'M12 3v6M12 15v6M3 12h6M15 12h6M12 12a5 5 0 000 10 5 5 0 000-10z',
+  play: 'M6 4v16l12-8z',
+  forward: 'M10 17l5-5-5-5M14 17l5-5-5-5',
+  'user-plus': 'M16 11c2 0 3.5-1.5 3.5-3.5S18 4 16 4s-3.5 1.5-3.5 3.5S14 11 16 11zM8 11c2 0 3.5-1.5 3.5-3.5S10 4 8 4s-3.5 1.5-3.5 3.5S6 11 8 11zM12 16v6M12 19h6',
+  history: 'M12 3v6M12 15v6M3 12h6M15 12h6M12 12a5 5 0 000 10 5 5 0 000-10z',
+  droplet: 'M12 3c-4 0-7 3-7 7a7 7 0 0014 0c0-4-3-7-7-7zM12 11v5M12 18h.01',
 };
 
 export function Icon({ name, label, className = '' }: { name: IconName; label?: string; className?: string }) {
