@@ -559,3 +559,311 @@ export async function addCombatAction(action: {
   const r = await supabase.from('combat_actions').insert(action).select('*').single();
   return ok(r);
 }
+
+// ========== FASE 4: COMPATIBILIDADE LEGADA ==========
+
+export interface LegacyMappingSuggestion {
+  source: string;
+  legacy_attributes: Record<string, number>;
+  mapping: Record<string, string>;
+  merge_rules: Record<string, string>;
+  suggested_at: string;
+  suggested_by: string | null;
+}
+
+export interface CharacterNeedingMigration {
+  id: string;
+  name: string;
+  campaign_id: string;
+  stage: number;
+  legacy_attributes: Record<string, number>;
+  pv_now: string | null;
+  pv_max: string | null;
+  alma_now: string | null;
+  alma_max: string | null;
+  has_attributes: boolean;
+}
+
+export async function suggestLegacyMapping(characterId: string): Promise<LegacyMappingSuggestion> {
+  const r = await supabase.rpc('suggest_legacy_mapping', { p_character_id: characterId });
+  return ok(r);
+}
+
+export async function migrateLegacyCharacter(
+  characterId: string,
+  mapping: Record<string, string>,
+  mergeRules: Record<string, string>,
+  overrideExisting: boolean = false
+): Promise<CharacterAttributes> {
+  const r = await supabase.rpc('migrate_legacy_character', {
+    p_character_id: characterId,
+    p_mapping: { mapping, source: 'sheet' },
+    p_merge_rules: mergeRules,
+    p_override_existing: overrideExisting
+  });
+  return ok(r);
+}
+
+export async function listCharactersNeedingMigration(): Promise<CharacterNeedingMigration[]> {
+  return ok(await supabase.from('characters_needing_migration').select('*')) ?? [];
+}
+
+// ========== FASE 4: MAPAS, REGIÕES E MARCADORES ==========
+
+export interface Map {
+  id: string;
+  campaign_id: string;
+  name: string;
+  description: string;
+  image_url: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  grid_type: 'square' | 'hex' | 'none';
+  grid_size: number;
+  grid_offset_x: number;
+  grid_offset_y: number;
+  fog_enabled: boolean;
+  fog_color: string;
+  fog_opacity: number;
+  visibility: 'all' | 'players_only' | 'gm_only';
+  sort_order: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MapLayer {
+  id: string;
+  map_id: string;
+  name: string;
+  layer_type: 'background' | 'grid' | 'tokens' | 'fog' | 'gm_notes' | 'measurements';
+  z_index: number;
+  visible: boolean;
+  gm_only: boolean;
+  opacity: number;
+  data: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Region {
+  id: string;
+  map_id: string;
+  name: string;
+  description: string;
+  shape_type: 'polygon' | 'circle' | 'rectangle';
+  geometry: Record<string, any>;
+  fill_color: string | null;
+  stroke_color: string | null;
+  stroke_width: number;
+  is_secret: boolean;
+  is_restricted: boolean;
+  tags: string[];
+  parent_region_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Marker {
+  id: string;
+  map_id: string;
+  region_id: string | null;
+  name: string;
+  description: string;
+  marker_type: 'poi' | 'npc' | 'encounter' | 'loot' | 'secret' | 'note' | 'entrance' | 'hazard' | 'rest' | 'shop' | 'custom';
+  icon: string;
+  icon_color: string;
+  icon_size: number;
+  x: number;
+  y: number;
+  linked_character_id: string | null;
+  linked_encounter_id: string | null;
+  linked_map_id: string | null;
+  is_secret: boolean;
+  is_discovered: boolean;
+  discovered_by: string[];
+  discovered_at: string | null;
+  tags: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MapPermission {
+  id: string;
+  map_id: string;
+  target_user_id: string | null;
+  target_role: 'all_players' | 'all_masters' | null;
+  can_view: boolean;
+  can_edit: boolean;
+  can_manage_layers: boolean;
+  can_manage_markers: boolean;
+  can_reveal_fog: boolean;
+  can_manage_regions: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+// Maps
+export async function listMaps(campaignId: string): Promise<Map[]> {
+  return ok(await supabase.from('maps').select('*').eq('campaign_id', campaignId).order('sort_order')) ?? [];
+}
+
+export async function getMap(id: string): Promise<Map | null> {
+  const r = await supabase.from('maps').select('*').eq('id', id).maybeSingle();
+  return ok(r);
+}
+
+export async function createMap(map: Omit<Map, 'id' | 'created_at' | 'updated_at'>): Promise<Map> {
+  const r = await supabase.from('maps').insert(map).select('*').single();
+  return ok(r);
+}
+
+export async function updateMap(
+  id: string,
+  patch: Partial<Omit<Map, 'id' | 'campaign_id' | 'created_by' | 'created_at' | 'updated_at'>>
+): Promise<Map> {
+  const r = await supabase.from('maps').update(patch).eq('id', id).select('*').maybeSingle();
+  if (!r.data) throw notFound();
+  return ok(r);
+}
+
+export async function deleteMap(id: string): Promise<void> {
+  const d = ok(await supabase.from('maps').delete().eq('id', id).select('id'));
+  if (!d?.length) throw notFound();
+}
+
+// Map Layers
+export async function listMapLayers(mapId: string): Promise<MapLayer[]> {
+  return ok(await supabase.from('map_layers').select('*').eq('map_id', mapId).order('z_index')) ?? [];
+}
+
+export async function getMapLayer(id: string): Promise<MapLayer | null> {
+  const r = await supabase.from('map_layers').select('*').eq('id', id).maybeSingle();
+  return ok(r);
+}
+
+export async function createMapLayer(layer: Omit<MapLayer, 'id' | 'created_at' | 'updated_at'>): Promise<MapLayer> {
+  const r = await supabase.from('map_layers').insert(layer).select('*').single();
+  return ok(r);
+}
+
+export async function updateMapLayer(
+  id: string,
+  patch: Partial<Omit<MapLayer, 'id' | 'map_id' | 'created_at' | 'updated_at'>>
+): Promise<MapLayer> {
+  const r = await supabase.from('map_layers').update(patch).eq('id', id).select('*').maybeSingle();
+  if (!r.data) throw notFound();
+  return ok(r);
+}
+
+export async function deleteMapLayer(id: string): Promise<void> {
+  const d = ok(await supabase.from('map_layers').delete().eq('id', id).select('id'));
+  if (!d?.length) throw notFound();
+}
+
+// Regions
+export async function listRegions(mapId: string): Promise<Region[]> {
+  return ok(await supabase.from('regions').select('*').eq('map_id', mapId).order('name')) ?? [];
+}
+
+export async function getRegion(id: string): Promise<Region | null> {
+  const r = await supabase.from('regions').select('*').eq('id', id).maybeSingle();
+  return ok(r);
+}
+
+export async function createRegion(region: Omit<Region, 'id' | 'created_at' | 'updated_at'>): Promise<Region> {
+  const r = await supabase.from('regions').insert(region).select('*').single();
+  return ok(r);
+}
+
+export async function updateRegion(
+  id: string,
+  patch: Partial<Omit<Region, 'id' | 'map_id' | 'created_by' | 'created_at' | 'updated_at'>>
+): Promise<Region> {
+  const r = await supabase.from('regions').update(patch).eq('id', id).select('*').maybeSingle();
+  if (!r.data) throw notFound();
+  return ok(r);
+}
+
+export async function deleteRegion(id: string): Promise<void> {
+  const d = ok(await supabase.from('regions').delete().eq('id', id).select('id'));
+  if (!d?.length) throw notFound();
+}
+
+// Markers
+export async function listMarkers(mapId: string, filters?: {
+  regionId?: string;
+  markerType?: string;
+  includeSecret?: boolean;
+}): Promise<Marker[]> {
+  let query = supabase.from('markers').select('*').eq('map_id', mapId);
+
+  if (filters?.regionId) query = query.eq('region_id', filters.regionId);
+  if (filters?.markerType) query = query.eq('marker_type', filters.markerType);
+  if (!filters?.includeSecret) query = query.eq('is_secret', false);
+
+  return ok(await query.order('name')) ?? [];
+}
+
+export async function getMarker(id: string): Promise<Marker | null> {
+  const r = await supabase.from('markers').select('*').eq('id', id).maybeSingle();
+  return ok(r);
+}
+
+export async function createMarker(marker: Omit<Marker, 'id' | 'created_at' | 'updated_at'>): Promise<Marker> {
+  const r = await supabase.from('markers').insert(marker).select('*').single();
+  return ok(r);
+}
+
+export async function updateMarker(
+  id: string,
+  patch: Partial<Omit<Marker, 'id' | 'map_id' | 'created_by' | 'created_at' | 'updated_at'>>
+): Promise<Marker> {
+  const r = await supabase.from('markers').update(patch).eq('id', id).select('*').maybeSingle();
+  if (!r.data) throw notFound();
+  return ok(r);
+}
+
+export async function deleteMarker(id: string): Promise<void> {
+  const d = ok(await supabase.from('markers').delete().eq('id', id).select('id'));
+  if (!d?.length) throw notFound();
+}
+
+export async function discoverMarker(id: string, userId: string): Promise<Marker> {
+  // Append user to discovered_by array and set is_discovered=true
+  const marker = await getMarker(id);
+  if (!marker) throw notFound();
+
+  const discoveredBy = [...new Set([...marker.discovered_by, userId])];
+  return updateMarker(id, {
+    is_discovered: true,
+    discovered_by: discoveredBy,
+    discovered_at: new Date().toISOString(),
+  });
+}
+
+// Map Permissions
+export async function listMapPermissions(mapId: string): Promise<MapPermission[]> {
+  return ok(await supabase.from('map_permissions').select('*').eq('map_id', mapId)) ?? [];
+}
+
+export async function createMapPermission(permission: Omit<MapPermission, 'id' | 'created_at'>): Promise<MapPermission> {
+  const r = await supabase.from('map_permissions').insert(permission).select('*').single();
+  return ok(r);
+}
+
+export async function updateMapPermission(
+  id: string,
+  patch: Partial<Omit<MapPermission, 'id' | 'map_id' | 'created_by' | 'created_at'>>
+): Promise<MapPermission> {
+  const r = await supabase.from('map_permissions').update(patch).eq('id', id).select('*').maybeSingle();
+  if (!r.data) throw notFound();
+  return ok(r);
+}
+
+export async function deleteMapPermission(id: string): Promise<void> {
+  const d = ok(await supabase.from('map_permissions').delete().eq('id', id).select('id'));
+  if (!d?.length) throw notFound();
+}
