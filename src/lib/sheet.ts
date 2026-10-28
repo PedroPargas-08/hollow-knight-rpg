@@ -1,9 +1,13 @@
-// Forma da ficha (JSONB `characters.sheet`) e utilidades puras. A lista de atributos é PROVISÓRIA (regras ainda não definidas).
-export const ATTRIBUTES = ['Vigor', 'Agilidade', 'Intelecto', 'Percepção', 'Presença', 'Vontade'] as const;
+// Forma da ficha (JSONB `characters.sheet`) e utilidades puras.
+import { ATTRIBUTES, calculateDefense, calculateMaxAlma, calculateMaxPV, getModifier, normalizeAttributeValue, type Attribute } from './rules';
+
+export { ATTRIBUTES };
+export type { Attribute };
 
 export interface Sheet {
   concept: string; archetype: string; origin: string;
-  attributes: Record<string, number>;
+  attributes: Record<Attribute, number>;
+  attributeBonuses: Record<Attribute, number>; // Bônus temporários (equipamentos, condições, etc)
   pv: { now: number; max: number }; alma: { now: number; max: number }; defense: number;
   history: string; personality: string; notes: string;
   abilities: unknown[]; equipment: unknown[];
@@ -16,10 +20,15 @@ export const clampInt = (v: unknown, min: number, max: number, fallback: number)
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
 
 export function defaultSheet(): Sheet {
+  const baseAttributes = Object.fromEntries(ATTRIBUTES.map((a) => [a, 10])) as Record<Attribute, number>;
+  const stage = 1;
   return {
     concept: '', archetype: '', origin: '',
-    attributes: Object.fromEntries(ATTRIBUTES.map((a) => [a, 10])),
-    pv: { now: 10, max: 10 }, alma: { now: 5, max: 5 }, defense: 10,
+    attributes: baseAttributes,
+    attributeBonuses: Object.fromEntries(ATTRIBUTES.map((a) => [a, 0])) as Record<Attribute, number>,
+    pv: { now: calculateMaxPV(10, stage), max: calculateMaxPV(10, stage) },
+    alma: { now: calculateMaxAlma(10, stage), max: calculateMaxAlma(10, stage) },
+    defense: calculateDefense(10),
     history: '', personality: '', notes: '', abilities: [], equipment: [],
   };
 }
@@ -34,10 +43,56 @@ export function normalizeSheet(raw: unknown): Sheet {
   };
   return {
     concept: str(o.concept, 300), archetype: str(o.archetype, 80), origin: str(o.origin, 80),
-    attributes: Object.fromEntries(ATTRIBUTES.map((a) => [a, clampInt(o.attributes?.[a], 0, 30, d.attributes[a])])),
+    attributes: Object.fromEntries(ATTRIBUTES.map((a) => [a, normalizeAttributeValue(o.attributes?.[a])])) as Record<Attribute, number>,
+    attributeBonuses: Object.fromEntries(ATTRIBUTES.map((a) => [a, clampInt(o.attributeBonuses?.[a], -10, 10, 0)])) as Record<Attribute, number>,
     pv: res(o.pv, d.pv), alma: res(o.alma, d.alma), defense: clampInt(o.defense, 0, 99, d.defense),
     history: str(o.history, 5000), personality: str(o.personality, 1000), notes: str(o.notes, 5000),
     abilities: Array.isArray(o.abilities) ? o.abilities.slice(0, 100) : [], equipment: Array.isArray(o.equipment) ? o.equipment.slice(0, 200) : [],
+  };
+}
+
+// ========== CÁLCULOS DA FICHA ==========
+
+/**
+ * Retorna o valor efetivo de um atributo (base + bônus)
+ */
+export function getEffectiveAttribute(sheet: Sheet, attr: Attribute): number {
+  return sheet.attributes[attr] + (sheet.attributeBonuses[attr] || 0);
+}
+
+/**
+ * Retorna o modificador efetivo de um atributo
+ */
+export function getEffectiveModifier(sheet: Sheet, attr: Attribute): number {
+  return getModifier(getEffectiveAttribute(sheet, attr));
+}
+
+/**
+ * Recalcula PV, ALMA e defesa baseados nos atributos e estágio atual.
+ * Útil para quando o mestre altera atributos ou estágio.
+ */
+export function recalculateDerivedStats(sheet: Sheet, stage: number): { pv: { max: number }; alma: { max: number }; defense: number } {
+  const vig = getEffectiveAttribute(sheet, 'VIG');
+  const int = getEffectiveAttribute(sheet, 'INT');
+  const agi = getEffectiveAttribute(sheet, 'AGI');
+
+  return {
+    pv: { max: calculateMaxPV(vig, stage) },
+    alma: { max: calculateMaxAlma(int, stage) },
+    defense: calculateDefense(agi),
+  };
+}
+
+/**
+ * Aplica os valores recalculados mantendo PV/ALMA atual dentro dos novos máximos
+ */
+export function applyRecalculatedStats(sheet: Sheet, stage: number): Sheet {
+  const derived = recalculateDerivedStats(sheet, stage);
+  return {
+    ...sheet,
+    pv: { max: derived.pv.max, now: Math.min(sheet.pv.now, derived.pv.max) },
+    alma: { max: derived.alma.max, now: Math.min(sheet.alma.now, derived.alma.max) },
+    defense: derived.defense,
   };
 }
 
