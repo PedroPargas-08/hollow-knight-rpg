@@ -50,7 +50,7 @@ const MARKER_TYPES = [
   { id: 'npc', label: 'NPC', icon: 'user' },
   { id: 'encounter', label: 'Encontro', icon: 'crosshair' },
   { id: 'loot', label: 'Tesouro', icon: 'gem' },
-  { id: 'secret', label: 'Segredo', icon: 'eye-off' },
+  { id: 'secret', label: 'Segredo', icon: 'eyeoff' },
   { id: 'note', label: 'Nota', icon: 'file-text' },
   { id: 'entrance', label: 'Entrada/Saída', icon: 'door-open' },
   { id: 'hazard', label: 'Perigo', icon: 'alert-triangle' },
@@ -59,12 +59,68 @@ const MARKER_TYPES = [
   { id: 'custom', label: 'Personalizado', icon: 'plus-circle' },
 ] as const;
 
+type NewLayerState = {
+  name: string;
+  layer_type: MapLayer['layer_type'];
+  z_index: number;
+  visible: boolean;
+  gm_only: boolean;
+  opacity: number;
+  data: Record<string, any>;
+};
+
+type NewRegionState = {
+  name: string;
+  description: string;
+  shape_type: 'polygon' | 'circle' | 'rectangle';
+  geometry: Record<string, any>;
+  fill_color: string | null;
+  stroke_color: string | null;
+  stroke_width: number;
+  is_secret: boolean;
+  is_restricted: boolean;
+  tags: string[];
+  parent_region_id: string | null;
+};
+
+type NewMarkerState = {
+  name: string;
+  description: string;
+  marker_type: Marker['marker_type'];
+  icon: string;
+  icon_color: string;
+  icon_size: number;
+  x: number;
+  y: number;
+  region_id: string | null;
+  linked_character_id: string | null;
+  linked_encounter_id: string | null;
+  linked_map_id: string | null;
+  is_secret: boolean;
+  is_discovered: boolean;
+  discovered_by: string[];
+  discovered_at: string | null;
+  tags: string[];
+};
+
+type NewPermissionState = {
+  target_user_id: string | null;
+  target_role: 'all_players' | 'all_masters' | null;
+  can_view: boolean;
+  can_edit: boolean;
+  can_manage_layers: boolean;
+  can_manage_markers: boolean;
+  can_reveal_fog: boolean;
+  can_manage_regions: boolean;
+};
+
 export function MapsPage() {
   const { profile } = useAuth();
   const camps = useAsync(listCampaigns, []);
   const mine = (camps.data ?? []).filter((c) => c.owner_id === profile!.id);
   const [pick, setPick] = useState<string>('');
   const camp = mine.find((c) => c.id === pick) ?? mine[0];
+  const [activeMapTab, setActiveMapTab] = useState<'layers' | 'regions' | 'markers' | 'permissions'>('layers');
 
   // Maps state
   const [maps, setMaps] = useState<Map[]>([]);
@@ -77,8 +133,15 @@ export function MapsPage() {
     grid_type: 'square' as 'square' | 'hex' | 'none',
     grid_size: 50,
     fog_enabled: true,
+    fog_color: '#000000',
+    fog_opacity: 0.85,
     visibility: 'all' as 'all' | 'players_only' | 'gm_only',
     sort_order: 0,
+    image_url: null as string | null,
+    image_width: null as number | null,
+    image_height: null as number | null,
+    grid_offset_x: 0,
+    grid_offset_y: 0,
   });
 
   // Layers state
@@ -92,6 +155,7 @@ export function MapsPage() {
     visible: true,
     gm_only: false,
     opacity: 1,
+    data: {} as Record<string, any>,
   });
 
   // Regions state
@@ -103,9 +167,13 @@ export function MapsPage() {
     description: '',
     shape_type: 'polygon' as 'polygon' | 'circle' | 'rectangle',
     geometry: {} as Record<string, any>,
+    fill_color: null as string | null,
+    stroke_color: null as string | null,
+    stroke_width: 2,
     is_secret: false,
     is_restricted: false,
     tags: [] as string[],
+    parent_region_id: null as string | null,
   });
 
   // Markers state
@@ -121,8 +189,14 @@ export function MapsPage() {
     icon_size: 1.0,
     x: 0,
     y: 0,
-    region_id: '' as string | null,
+    region_id: null as string | null,
+    linked_character_id: null as string | null,
+    linked_encounter_id: null as string | null,
+    linked_map_id: null as string | null,
     is_secret: false,
+    is_discovered: false,
+    discovered_by: [] as string[],
+    discovered_at: null as string | null,
     tags: [] as string[],
   });
 
@@ -131,7 +205,7 @@ export function MapsPage() {
   const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [showCreatePermission, setShowCreatePermission] = useState(false);
   const [newPermission, setNewPermission] = useState({
-    target_user_id: '',
+    target_user_id: null as string | null,
     target_role: 'all_players' as 'all_players' | 'all_masters' | null,
     can_view: true,
     can_edit: false,
@@ -198,9 +272,16 @@ export function MapsPage() {
         campaign_id: camp.id,
         name: newMap.name.trim(),
         description: newMap.description.trim(),
+        image_url: newMap.image_url,
+        image_width: newMap.image_width,
+        image_height: newMap.image_height,
         grid_type: newMap.grid_type,
         grid_size: newMap.grid_size,
+        grid_offset_x: newMap.grid_offset_x,
+        grid_offset_y: newMap.grid_offset_y,
         fog_enabled: newMap.fog_enabled,
+        fog_color: newMap.fog_color,
+        fog_opacity: newMap.fog_opacity,
         visibility: newMap.visibility,
         sort_order: newMap.sort_order,
         created_by: profile!.id,
@@ -208,7 +289,7 @@ export function MapsPage() {
       setMaps(prev => [...prev, map]);
       setSelectedMap(map);
       setShowCreateMap(false);
-      setNewMap({ name: '', description: '', grid_type: 'square', grid_size: 50, fog_enabled: true, visibility: 'all', sort_order: 0 });
+      setNewMap({ name: '', description: '', grid_type: 'square', grid_size: 50, fog_enabled: true, fog_color: '#000000', fog_opacity: 0.85, visibility: 'all', sort_order: 0, image_url: null, image_width: null, image_height: null, grid_offset_x: 0, grid_offset_y: 0 });
     } catch (e) {
       console.error(e);
     }
@@ -249,10 +330,11 @@ export function MapsPage() {
         visible: newLayer.visible,
         gm_only: newLayer.gm_only,
         opacity: newLayer.opacity,
+        data: newLayer.data,
       });
       setLayers(prev => [...prev, layer].sort((a, b) => a.z_index - b.z_index));
       setShowCreateLayer(false);
-      setNewLayer({ name: '', layer_type: 'tokens', z_index: 0, visible: true, gm_only: false, opacity: 1 });
+      setNewLayer({ name: '', layer_type: 'tokens', z_index: 0, visible: true, gm_only: false, opacity: 1, data: {} });
     } catch (e) {
       console.error(e);
     }
@@ -276,14 +358,18 @@ export function MapsPage() {
         description: newRegion.description.trim(),
         shape_type: newRegion.shape_type,
         geometry: newRegion.geometry,
+        fill_color: newRegion.fill_color,
+        stroke_color: newRegion.stroke_color,
+        stroke_width: newRegion.stroke_width,
         is_secret: newRegion.is_secret,
         is_restricted: newRegion.is_restricted,
         tags: newRegion.tags,
+        parent_region_id: newRegion.parent_region_id,
         created_by: profile!.id,
       });
       setRegions(prev => [...prev, region]);
       setShowCreateRegion(false);
-      setNewRegion({ name: '', description: '', shape_type: 'polygon', geometry: {}, is_secret: false, is_restricted: false, tags: [] });
+      setNewRegion({ name: '', description: '', shape_type: 'polygon', geometry: {}, fill_color: null, stroke_color: null, stroke_width: 2, is_secret: false, is_restricted: false, tags: [], parent_region_id: null });
     } catch (e) {
       console.error(e);
     }
@@ -303,7 +389,7 @@ export function MapsPage() {
     try {
       const marker = await createMarker({
         map_id: selectedMap.id,
-        region_id: newMarker.region_id || undefined,
+        region_id: newMarker.region_id || null,
         name: newMarker.name.trim(),
         description: newMarker.description.trim(),
         marker_type: newMarker.marker_type,
@@ -312,13 +398,19 @@ export function MapsPage() {
         icon_size: newMarker.icon_size,
         x: newMarker.x,
         y: newMarker.y,
+        linked_character_id: newMarker.linked_character_id || null,
+        linked_encounter_id: newMarker.linked_encounter_id || null,
+        linked_map_id: newMarker.linked_map_id || null,
         is_secret: newMarker.is_secret,
+        is_discovered: newMarker.is_discovered,
+        discovered_by: newMarker.discovered_by,
+        discovered_at: newMarker.discovered_at || null,
         tags: newMarker.tags,
         created_by: profile!.id,
       });
       setMarkers(prev => [...prev, marker]);
       setShowCreateMarker(false);
-      setNewMarker({ name: '', description: '', marker_type: 'poi', icon: 'map-pin', icon_color: '#3b82f6', icon_size: 1.0, x: 0, y: 0, region_id: null, is_secret: false, tags: [] });
+      setNewMarker({ name: '', description: '', marker_type: 'poi', icon: 'map-pin', icon_color: '#3b82f6', icon_size: 1.0, x: 0, y: 0, region_id: null, linked_character_id: null, linked_encounter_id: null, linked_map_id: null, is_secret: false, is_discovered: false, discovered_by: [], discovered_at: null, tags: [] });
     } catch (e) {
       console.error(e);
     }
@@ -347,8 +439,8 @@ export function MapsPage() {
     try {
       const permission = await createMapPermission({
         map_id: selectedMap.id,
-        target_user_id: newPermission.target_user_id || undefined,
-        target_role: newPermission.target_role || undefined,
+        target_user_id: newPermission.target_user_id || null,
+        target_role: newPermission.target_role || null,
         can_view: newPermission.can_view,
         can_edit: newPermission.can_edit,
         can_manage_layers: newPermission.can_manage_layers,
@@ -359,7 +451,7 @@ export function MapsPage() {
       });
       setPermissions(prev => [...prev, permission]);
       setShowCreatePermission(false);
-      setNewPermission({ target_user_id: '', target_role: 'all_players', can_view: true, can_edit: false, can_manage_layers: false, can_manage_markers: false, can_reveal_fog: false, can_manage_regions: false });
+      setNewPermission({ target_user_id: null, target_role: 'all_players', can_view: true, can_edit: false, can_manage_layers: false, can_manage_markers: false, can_reveal_fog: false, can_manage_regions: false });
     } catch (e) {
       console.error(e);
     }
@@ -472,7 +564,7 @@ export function MapsPage() {
                 </div>
                 <div className="grid cols-2">
                   <Field label="Névoa de Guerra" htmlFor="map-fog">
-                    <select id="map-fog" className="input" value={newMap.fog_enabled} onChange={e => setNewMap(prev => ({ ...prev, fog_enabled: e.target.value === 'true' }))}>
+                    <select id="map-fog" className="input" value={newMap.fog_enabled ? 'true' : 'false'} onChange={e => setNewMap(prev => ({ ...prev, fog_enabled: e.target.value === 'true' }))}>
                       <option value="true">Ativa</option>
                       <option value="false">Inativa</option>
                     </select>
@@ -518,7 +610,7 @@ export function MapsPage() {
                   { id: 'permissions', label: 'Permissões', icon: 'shield' },
                 ]}
                 activeTab={activeMapTab}
-                onChange={setActiveMapTab}
+                onChange={(id) => setActiveMapTab(id as any)}
               />
               {activeMapTab === 'layers' && (
                 <MapLayersPanel
@@ -604,8 +696,6 @@ function TabsComponent({ tabs, activeTab, onChange }: { tabs: { id: string; labe
   );
 }
 
-const [activeMapTab, setActiveMapTab] = useState<'layers' | 'regions' | 'markers' | 'permissions'>('layers');
-
 function MapLayersPanel({
   map,
   layers,
@@ -622,8 +712,8 @@ function MapLayersPanel({
   loading: boolean;
   showCreate: boolean;
   setShowCreate: (v: boolean) => void;
-  newLayer: MapLayer;
-  setNewLayer: React.Dispatch<React.SetStateAction<MapLayer>>;
+  newLayer: NewLayerState;
+  setNewLayer: React.Dispatch<React.SetStateAction<NewLayerState>>;
   onCreate: () => void;
   onDelete: (id: string) => void;
 }) {
@@ -705,8 +795,8 @@ function RegionsPanel({
   loading: boolean;
   showCreate: boolean;
   setShowCreate: (v: boolean) => void;
-  newRegion: Region;
-  setNewRegion: React.Dispatch<React.SetStateAction<Region>>;
+  newRegion: NewRegionState;
+  setNewRegion: React.Dispatch<React.SetStateAction<NewRegionState>>;
   onCreate: () => void;
   onDelete: (id: string) => void;
 }) {
@@ -735,7 +825,7 @@ function RegionsPanel({
               {r.description && <div className="muted small" style={{ marginTop: '0.25rem' }}>{r.description}</div>}
               {r.tags.length > 0 && (
                 <div className="row" style={{ gap: '0.25rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
-                  {r.tags.map(t => <Badge key={t} tone="accent" size="sm">{t}</Badge>)}
+                  {r.tags.map(t => <Badge key={t} tone="accent">{t}</Badge>)}
                 </div>
               )}
               <div className="muted small" style={{ marginTop: '0.25rem' }}>
@@ -806,8 +896,8 @@ function MarkersPanel({
   loading: boolean;
   showCreate: boolean;
   setShowCreate: (v: boolean) => void;
-  newMarker: Marker;
-  setNewMarker: React.Dispatch<React.SetStateAction<Marker>>;
+  newMarker: NewMarkerState;
+  setNewMarker: React.Dispatch<React.SetStateAction<NewMarkerState>>;
   onCreate: () => void;
   onDelete: (id: string) => void;
   onToggleDiscovered: (marker: Marker) => void;
@@ -870,7 +960,7 @@ function MarkersPanel({
       )}
 
       {showCreate && (
-        <Modal title="Novo Marcador" onClose={() => setShowCreate(false)} style={{ maxWidth: '600px' }}>
+        <Modal title="Novo Marcador" onClose={() => setShowCreate(false)}>
           <form className="stack" onSubmit={e => { e.preventDefault(); onCreate(); }}>
             <div className="grid cols-2">
               <Field label="Nome" htmlFor="marker-name">
@@ -947,8 +1037,8 @@ function PermissionsPanel({
   loading: boolean;
   showCreate: boolean;
   setShowCreate: (v: boolean) => void;
-  newPermission: MapPermission;
-  setNewPermission: React.Dispatch<React.SetStateAction<MapPermission>>;
+  newPermission: NewPermissionState;
+  setNewPermission: React.Dispatch<React.SetStateAction<NewPermissionState>>;
   onCreate: () => void;
   onDelete: (id: string) => void;
 }) {
@@ -1003,14 +1093,14 @@ function PermissionsPanel({
               <label>Alvo</label>
               <div className="row" style={{ gap: '1rem', alignItems: 'center' }}>
                 <label className="row" style={{ gap: '0.5rem' }}>
-                  <input type="radio" name="perm-target" checked={!newPermission.target_user_id && newPermission.target_role === 'all_players'} onChange={() => setNewPermission(prev => ({ ...prev, target_user_id: '', target_role: 'all_players' }))} /> Todos os jogadores
+                  <input type="radio" name="perm-target" checked={!newPermission.target_user_id && newPermission.target_role === 'all_players'} onChange={() => setNewPermission(prev => ({ ...prev, target_user_id: null, target_role: 'all_players' }))} /> Todos os jogadores
                 </label>
                 <label className="row" style={{ gap: '0.5rem' }}>
-                  <input type="radio" name="perm-target" checked={newPermission.target_role === 'all_masters'} onChange={() => setNewPermission(prev => ({ ...prev, target_user_id: '', target_role: 'all_masters' }))} /> Todos os mestres
+                  <input type="radio" name="perm-target" checked={newPermission.target_role === 'all_masters'} onChange={() => setNewPermission(prev => ({ ...prev, target_user_id: null, target_role: 'all_masters' }))} /> Todos os mestres
                 </label>
                 <label className="row" style={{ gap: '0.5rem' }}>
                   <input type="radio" name="perm-target" checked={!!newPermission.target_user_id} onChange={() => setNewPermission(prev => ({ ...prev, target_user_id: 'user-id-placeholder', target_role: null }))} />
-                  <input type="text" className="input" style={{ width: '200px' }} placeholder="ID do usuário" value={newPermission.target_user_id} onChange={e => setNewPermission(prev => ({ ...prev, target_user_id: e.target.value }))} />
+                  <input type="text" className="input" style={{ width: '200px' }} placeholder="ID do usuário" value={newPermission.target_user_id || ''} onChange={e => setNewPermission(prev => ({ ...prev, target_user_id: e.target.value || null }))} />
                 </label>
               </div>
             </div>

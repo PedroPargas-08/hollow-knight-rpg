@@ -47,6 +47,22 @@ const PATHS: Record<IconName, string> = {
   'user-plus': 'M16 11c2 0 3.5-1.5 3.5-3.5S18 4 16 4s-3.5 1.5-3.5 3.5S14 11 16 11zM8 11c2 0 3.5-1.5 3.5-3.5S10 4 8 4s-3.5 1.5-3.5 3.5S6 11 8 11zM12 16v6M12 19h6',
   history: 'M12 3v6M12 15v6M3 12h6M15 12h6M12 12a5 5 0 000 10 5 5 0 000-10z',
   droplet: 'M12 3c-4 0-7 3-7 7a7 7 0 0014 0c0-4-3-7-7-7zM12 11v5M12 18h.01',
+  // New icons for Maps page
+  edit: 'M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7',
+  trash: 'M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2',
+  layers: 'M12 3v6m0 6v6M3 12h18M3 6h18M3 18h18',
+  'map-pin': 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z',
+  'door-open': 'M13 9h6a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V4a2 2 0 012-2h5',
+  'alert-triangle': 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+  moon: 'M12 3a6 6 0 000 12h3a6 6 0 000-12H12z',
+  'shopping-bag': 'M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0',
+  'plus-circle': 'M12 5v14M5 12h14M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  grid: 'M3 9h18M3 15h18M9 3v18M15 3v18',
+  'file-text': 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
+  ruler: 'M3 15h18M3 9h18M9 3v18M15 3v18',
+  image: 'M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2zM17 11a2 2 0 104 0 2 2 0 00-4 0zM9 9a2 2 0 100-4 2 2 0 000 4zM23 21H1M1 1h22',
+  cloud: 'M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z',
+  x: 'M18 6L6 18M6 6l12 12',
 };
 
 export function Icon({ name, label, className = '' }: { name: IconName; label?: string; className?: string }) {

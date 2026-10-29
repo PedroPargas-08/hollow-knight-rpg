@@ -6,8 +6,37 @@ import { ATTRIBUTES, calculateMaxPV, calculateMaxAlma, calculateDefense, type At
 // ========== TIPOS EXISTENTES ==========
 export interface Campaign { id: string; name: string; description: string; status: 'preparacao' | 'andamento' | 'pausada' | 'encerrada'; owner_id: string; created_at: string }
 export interface Member { id: string; user_id: string; member_role: 'jogador' | 'co_mestre'; display_name: string }
-export interface Character { id: string; campaign_id: string; owner_id: string; name: string; stage: number; sheet: Sheet; updated_at: string }
+export interface Character {
+  id: string;
+  campaign_id: string;
+  owner_id: string;
+  name: string;
+  stage: number;
+  character_type?: 'principal' | 'extra' | 'invocacao';
+  parent_character_id?: string | null;
+  sheet: Sheet;
+  updated_at: string;
+}
 export const STATUS_LABEL: Record<Campaign['status'], string> = { preparacao: 'Em preparação', andamento: 'Em andamento', pausada: 'Pausada', encerrada: 'Encerrada' };
+
+export interface CharacterCreationRequest {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  character_name: string;
+  request_type: 'extra' | 'invocacao';
+  parent_character_id: string | null;
+  concept: string;
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  gm_notes: string;
+  consumed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  user_display_name?: string;
+  parent_character_name?: string;
+}
 
 // ========== TIPOS FASE 3 ==========
 export interface CharacterAttributes {
@@ -171,18 +200,26 @@ export const createInvite = async (campaignId: string, role: 'jogador' | 'co_mes
 export const redeemInvite = async (token: string): Promise<string> => ok(await supabase.rpc('redeem_campaign_invite', { p_token: token.trim() }));
 
 export const listCharacters = async (): Promise<Character[]> =>
-  ((ok(await supabase.from('characters').select('id, campaign_id, owner_id, name, stage, sheet, updated_at').order('updated_at', { ascending: false })) ?? []) as any[]).map(toChar);
+  ((ok(await supabase.from('characters').select('id, campaign_id, owner_id, name, stage, character_type, parent_character_id, sheet, updated_at').order('updated_at', { ascending: false })) ?? []) as any[]).map(toChar);
 export async function getCharacter(id: string): Promise<Character | null> {
-  const r = ok(await supabase.from('characters').select('id, campaign_id, owner_id, name, stage, sheet, updated_at').eq('id', id).maybeSingle());
+  const r = ok(await supabase.from('characters').select('id, campaign_id, owner_id, name, stage, character_type, parent_character_id, sheet, updated_at').eq('id', id).maybeSingle());
   return r ? toChar(r) : null;
 }
-export const createCharacter = async (v: { campaign_id: string; name: string; sheet: Sheet }): Promise<Character> => {
+export const createCharacter = async (v: {
+  campaign_id: string;
+  name: string;
+  sheet: Sheet;
+  character_type?: 'principal' | 'extra' | 'invocacao';
+  parent_character_id?: string | null;
+}): Promise<Character> => {
   // 1. Create the character
   const character = toChar(ok(await supabase.from('characters').insert({
     campaign_id: v.campaign_id,
     name: v.name.trim(),
-    sheet: v.sheet
-  }).select('id, campaign_id, owner_id, name, stage, sheet, updated_at').single()));
+    sheet: v.sheet,
+    character_type: v.character_type || 'principal',
+    parent_character_id: v.parent_character_id || null,
+  }).select('id, campaign_id, owner_id, name, stage, character_type, parent_character_id, sheet, updated_at').single()));
 
   // 2. Create character_attributes with initial values from sheet
   const baseVig = v.sheet.attributes.VIG;
@@ -867,3 +904,60 @@ export async function deleteMapPermission(id: string): Promise<void> {
   const d = ok(await supabase.from('map_permissions').delete().eq('id', id).select('id'));
   if (!d?.length) throw notFound();
 }
+
+// ========== SOLICITAÇÕES DE CRIAÇÃO DE PERSONAGENS E INVOCAÇÕES ==========
+
+export async function requestCharacterCreation(params: {
+  campaignId: string;
+  characterName: string;
+  requestType: 'extra' | 'invocacao';
+  concept?: string;
+  parentCharacterId?: string | null;
+}): Promise<string> {
+  const r = await supabase.rpc('request_character_creation', {
+    p_campaign_id: params.campaignId,
+    p_character_name: params.characterName.trim(),
+    p_request_type: params.requestType,
+    p_concept: params.concept?.trim() || '',
+    p_parent_character_id: params.parentCharacterId || null,
+  });
+  return ok(r);
+}
+
+export async function reviewCharacterCreationRequest(params: {
+  requestId: string;
+  status: 'aprovado' | 'rejeitado';
+  gmNotes?: string;
+}): Promise<boolean> {
+  const r = await supabase.rpc('review_character_creation_request', {
+    p_request_id: params.requestId,
+    p_status: params.status,
+    p_gm_notes: params.gmNotes?.trim() || '',
+  });
+  return ok(r);
+}
+
+export async function listCharacterCreationRequests(campaignId?: string): Promise<CharacterCreationRequest[]> {
+  let query = supabase.from('character_creation_requests').select('*');
+  if (campaignId) {
+    query = query.eq('campaign_id', campaignId);
+  }
+  const rows = ok(await query.order('created_at', { ascending: false })) ?? [];
+  if (!rows.length) return [];
+
+  const userIds = [...new Set(rows.map((r: any) => r.user_id))];
+  const charIds = [...new Set(rows.filter((r: any) => r.parent_character_id).map((r: any) => r.parent_character_id))];
+
+  const profs = userIds.length ? (ok(await supabase.from('profiles').select('id, display_name').in('id', userIds)) ?? []) : [];
+  const chars = charIds.length ? (ok(await supabase.from('characters').select('id, name').in('id', charIds)) ?? []) : [];
+
+  const userMap = new Map((profs as any[]).map(p => [p.id, p.display_name]));
+  const charMap = new Map((chars as any[]).map(c => [c.id, c.name]));
+
+  return (rows as any[]).map((r: any) => ({
+    ...r,
+    user_display_name: userMap.get(r.user_id) || 'Jogador',
+    parent_character_name: r.parent_character_id ? charMap.get(r.parent_character_id) : undefined,
+  }));
+}
+
